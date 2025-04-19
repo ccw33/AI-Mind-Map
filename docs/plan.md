@@ -12,8 +12,8 @@ gantt
     dateFormat  YYYY-MM-DD
     section 核心功能
     节点树管理:
-        create_delete :crit, a1, 2025-04-20, 3d
-        relation_viz  :crit, after a1, 5d
+        create_delete :done, 2025-04-20, 1d
+        relation_viz  :crit, after a1, 3d
     AI对话交互:
         stream_response :crit, a2, 2025-04-25, 5d
         symbol_parser  :crit, after a2, 3d
