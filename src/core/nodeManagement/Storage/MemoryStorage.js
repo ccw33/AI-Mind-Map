@@ -1,5 +1,5 @@
 // 内存存储适配器
-export class MemoryStorage {
+class MemoryStorage {
   constructor() {
     this.data = {};
   }
@@ -13,7 +13,14 @@ export class MemoryStorage {
 
   set(key, value) {
     if (this.data.hasOwnProperty(key)) {
-      throw new Error(`Key ${key} already exists`);
+      throw new Error(`Duplicate node ID: ${key.replace('node_', '')}`);
+    }
+    this.data[key] = value;
+  }
+
+  update(key, value) {
+    if (!this.data.hasOwnProperty(key)) {
+      throw new Error(`Key ${key} not found`);
     }
     this.data[key] = value;
   }
@@ -21,8 +28,6 @@ export class MemoryStorage {
   delete(key) {
     delete this.data[key];
   }
-
-  getAll() {
-    return {...this.data};
-  }
 }
+
+exports.MemoryStorage = MemoryStorage;

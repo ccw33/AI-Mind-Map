@@ -5,12 +5,26 @@ module.exports = {
         node: 'current'
       },
       modules: 'auto'
-    }]
+    }],
+    '@babel/preset-react'
   ],
-  plugins: [],
+  plugins: [
+    '@babel/plugin-proposal-class-properties'
+  ],
   env: {
     test: {
-      plugins: []
+      presets: [
+        ['@babel/preset-env', {
+          targets: {
+            node: 'current'
+          },
+          modules: 'commonjs'
+        }],
+        '@babel/preset-react'
+      ],
+      plugins: [
+        '@babel/plugin-proposal-class-properties'
+      ]
     }
   }
 }

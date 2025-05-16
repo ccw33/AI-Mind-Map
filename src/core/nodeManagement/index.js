@@ -23,9 +23,15 @@ export function getNode(nodeId) {
 // 可视化相关操作
 export * from './visualization';
 
-// 兼容旧版测试
+// 测试辅助函数
 export function __testResetNodes() {
   if (crudService.reset) {
     crudService.reset();
+  }
+}
+
+export function __testResetAutoSave() {
+  if (crudService.resetAutoSave) {
+    crudService.resetAutoSave();
   }
 }

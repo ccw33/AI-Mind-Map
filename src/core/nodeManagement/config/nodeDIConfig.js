@@ -1,15 +1,22 @@
-import { MemoryStorage } from '../Storage/MemoryStorage';
+import { StorageFactory } from '../Storage/StorageFactory';
 import { NodeCRUDService } from '../CRUD/NodeCRUDService';
 import { SVGRenderer } from '../Render/SVGRenderer';
 
 // 依赖注入配置
 export const nodeDIConfig = {
-  storage: new MemoryStorage(),
-  crudService: new NodeCRUDService(),
-  renderEngine: new SVGRenderer({
-    theme: 'light',
-    lineStyle: 'straight'
-  }),
+  storage: null,
+  crudService: null,
+  renderEngine: null,
+
+  async init() {
+    this.storage = await StorageFactory.createStorage();
+    this.crudService = new NodeCRUDService();
+    this.renderEngine = new SVGRenderer({
+      theme: 'light', 
+      lineStyle: 'straight'
+    });
+    await this.crudService.init();
+  },
 
   getNodeManager() {
     return new NodeManager({
