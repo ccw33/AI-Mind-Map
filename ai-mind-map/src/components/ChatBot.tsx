@@ -1,7 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Plus, Minimize2, Maximize2 } from 'lucide-react'
+import { Send, Bot, User, Plus, Minimize2, Maximize2, Check, CheckSquare, Square } from 'lucide-react'
+
+// 结构化分点接口
+export interface StructuredPoint {
+  id: string
+  title: string // 关键词标题
+  content: string // 详细内容
+  keywords: string[] // 提取的关键词
+}
 
 // 消息类型
 export interface ChatMessage {
@@ -15,6 +23,7 @@ export interface ChatMessage {
     hierarchy: string[]
   }
   suggestions?: NodeSuggestion[]
+  structuredPoints?: StructuredPoint[] // 结构化分点
 }
 
 // 节点建议类型
@@ -36,16 +45,18 @@ export interface SelectedNodeContext {
 interface ChatBotProps {
   selectedNode?: SelectedNodeContext
   onAddNode?: (suggestion: NodeSuggestion, nodeId?: string) => void
+  onAddStructuredPoints?: (points: StructuredPoint[], nodeId?: string) => void
   className?: string
 }
 
 // AI聊天机器人组件 - 实现与思维导图的智能对话交互
-export default function ChatBot({ selectedNode, onAddNode, className = '' }: ChatBotProps) {
+export default function ChatBot({ selectedNode, onAddNode, onAddStructuredPoints, className = '' }: ChatBotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [selectedPoints, setSelectedPoints] = useState<{[messageId: string]: Set<string>}>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -143,7 +154,8 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
           text: context.text,
           hierarchy: context.hierarchy
         } : undefined,
-        suggestions
+        suggestions,
+        structuredPoints: aiResponse.structuredPoints || []
       }
 
     } catch (error) {
@@ -268,6 +280,55 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
     }
   }
 
+  // 处理分点选择
+  const handlePointSelection = (messageId: string, pointId: string) => {
+    setSelectedPoints(prev => {
+      const messagePoints = prev[messageId] || new Set()
+      const newMessagePoints = new Set(messagePoints)
+
+      if (newMessagePoints.has(pointId)) {
+        newMessagePoints.delete(pointId)
+      } else {
+        newMessagePoints.add(pointId)
+      }
+
+      return {
+        ...prev,
+        [messageId]: newMessagePoints
+      }
+    })
+  }
+
+  // 全选/反选分点
+  const handleSelectAllPoints = (messageId: string, points: StructuredPoint[]) => {
+    setSelectedPoints(prev => {
+      const messagePoints = prev[messageId] || new Set()
+      const allSelected = points.every(point => messagePoints.has(point.id))
+
+      return {
+        ...prev,
+        [messageId]: allSelected ? new Set() : new Set(points.map(p => p.id))
+      }
+    })
+  }
+
+  // 添加选中的分点到思维导图
+  const handleAddSelectedPoints = (messageId: string, allPoints: StructuredPoint[]) => {
+    const selectedPointIds = selectedPoints[messageId]
+    if (!selectedPointIds || selectedPointIds.size === 0 || !selectedNode || !onAddStructuredPoints) {
+      return
+    }
+
+    const pointsToAdd = allPoints.filter(point => selectedPointIds.has(point.id))
+    onAddStructuredPoints(pointsToAdd, selectedNode.id)
+
+    // 清除选择状态
+    setSelectedPoints(prev => ({
+      ...prev,
+      [messageId]: new Set()
+    }))
+  }
+
   if (isMinimized) {
     return (
       <div className={`fixed bottom-4 right-4 ${className}`}>
@@ -363,6 +424,78 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
                         </div>
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* 结构化分点选择 */}
+                {message.structuredPoints && message.structuredPoints.length > 0 && (
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-gray-500">🎯 智能分点</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSelectAllPoints(message.id, message.structuredPoints!)}
+                          className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          {message.structuredPoints.every(point => selectedPoints[message.id]?.has(point.id)) ? '取消全选' : '全选'}
+                        </button>
+                        {selectedPoints[message.id]?.size > 0 && (
+                          <button
+                            onClick={() => handleAddSelectedPoints(message.id, message.structuredPoints!)}
+                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full transition-colors"
+                          >
+                            添加选中 ({selectedPoints[message.id]?.size})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {message.structuredPoints.map((point) => {
+                        const isSelected = selectedPoints[message.id]?.has(point.id) || false
+                        return (
+                          <div
+                            key={point.id}
+                            className={`border rounded-lg p-3 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                            }`}
+                            onClick={() => handlePointSelection(message.id, point.id)}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5">
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-gray-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm text-gray-800 mb-1">
+                                  {point.title}
+                                </div>
+                                <div className="text-xs text-gray-600 leading-relaxed">
+                                  {point.content}
+                                </div>
+                                {point.keywords.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {point.keywords.map((keyword, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full"
+                                      >
+                                        {keyword}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
 

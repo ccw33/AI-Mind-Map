@@ -26,6 +26,7 @@ export default function MindMap({
   initialData
 }: MindMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const mindMapContainerRef = useRef<HTMLDivElement>(null)
   const mindMapRef = useRef<any>(null)
   const [isLoaded, setIsLoaded] = useState(false)
 
@@ -144,22 +145,101 @@ export default function MindMap({
 
   // 添加子节点
   const addChildNode = (text: string, parentNodeId?: string) => {
-    if (!mindMapRef.current) return
+    if (!mindMapRef.current) return null
 
     try {
-      const activeNodes = mindMapRef.current.renderer.activeNodeList
-      const targetNode = parentNodeId
-        ? mindMapRef.current.renderer.findNodeByUid(parentNodeId)
-        : activeNodes.length > 0 ? activeNodes[0] : mindMapRef.current.renderer.root
+      // 获取当前思维导图数据
+      const currentData = mindMapRef.current.getData()
 
-      if (targetNode) {
-        mindMapRef.current.execCommand('INSERT_CHILD_NODE', targetNode, {
-          data: { text }
-        })
+      // 递归查找目标节点并添加子节点
+      const addNodeToData = (node: any, targetId?: string): boolean => {
+        if (!targetId || (node.data && node.data.uid === targetId)) {
+          // 如果没有指定目标ID或找到了目标节点，添加子节点
+          if (!node.children) {
+            node.children = []
+          }
+          node.children.push({
+            data: {
+              text,
+              uid: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            },
+            children: []
+          })
+          return true
+        }
+
+        // 递归查找子节点
+        if (node.children) {
+          for (let child of node.children) {
+            if (addNodeToData(child, targetId)) {
+              return true
+            }
+          }
+        }
+        return false
+      }
+
+      // 添加节点到数据
+      if (addNodeToData(currentData, parentNodeId)) {
+        // 更新思维导图数据
+        mindMapRef.current.setData(currentData)
+        console.log('子节点添加成功:', text)
+        return `node_${Date.now()}`
       }
     } catch (error) {
       console.error('添加子节点失败:', error)
     }
+    return null
+  }
+
+  // 添加带备注的子节点
+  const addChildNodeWithNote = (text: string, note: string, parentNodeId?: string) => {
+    if (!mindMapRef.current) return null
+
+    try {
+      // 获取当前思维导图数据
+      const currentData = mindMapRef.current.getData()
+
+      // 递归查找目标节点并添加子节点
+      const addNodeToData = (node: any, targetId?: string): boolean => {
+        if (!targetId || (node.data && node.data.uid === targetId)) {
+          // 如果没有指定目标ID或找到了目标节点，添加子节点
+          if (!node.children) {
+            node.children = []
+          }
+          node.children.push({
+            data: {
+              text,
+              note, // 添加备注内容
+              uid: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            },
+            children: []
+          })
+          return true
+        }
+
+        // 递归查找子节点
+        if (node.children) {
+          for (let child of node.children) {
+            if (addNodeToData(child, targetId)) {
+              return true
+            }
+          }
+        }
+        return false
+      }
+
+      // 添加节点到数据
+      if (addNodeToData(currentData, parentNodeId)) {
+        // 更新思维导图数据
+        mindMapRef.current.setData(currentData)
+        console.log('带备注的子节点添加成功:', text, '备注:', note)
+        return `node_${Date.now()}`
+      }
+    } catch (error) {
+      console.error('添加带备注的子节点失败:', error)
+    }
+    return null
   }
 
   // 添加同级节点
@@ -198,23 +278,26 @@ export default function MindMap({
 
   // 暴露方法给父组件
   useEffect(() => {
-    if (isLoaded && mindMapRef.current && containerRef.current) {
-      // 将方法挂载到组件实例上，供外部调用
-      const container = containerRef.current.parentElement
-      if (container) {
-        ;(container as any)._mindMapMethods = {
-          addChildNode,
-          addSiblingNode,
-          updateNodeText,
-          getMindMapData: () => mindMapRef.current?.getData(),
-          setMindMapData: (data: MindMapNode) => mindMapRef.current?.setData(data)
-        }
+    if (isLoaded && mindMapRef.current && mindMapContainerRef.current) {
+      // 将方法挂载到data-mindmap-container元素上，供外部调用
+      ;(mindMapContainerRef.current as any)._mindMapMethods = {
+        addChildNode,
+        addChildNodeWithNote,
+        addSiblingNode,
+        updateNodeText,
+        getMindMapData: () => mindMapRef.current?.getData(),
+        setMindMapData: (data: MindMapNode) => mindMapRef.current?.setData(data)
       }
+      console.log('思维导图方法已挂载')
     }
   }, [isLoaded])
 
   return (
-    <div className="w-full h-full relative" data-mindmap-container>
+    <div
+      className="w-full h-full relative"
+      data-mindmap-container
+      ref={mindMapContainerRef}
+    >
       <div
         ref={containerRef}
         className="w-full h-full bg-white"

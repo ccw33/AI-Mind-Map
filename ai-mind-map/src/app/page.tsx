@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import MindMap, { MindMapNode } from '@/components/MindMap'
-import ChatBot, { SelectedNodeContext, NodeSuggestion } from '@/components/ChatBot'
+import ChatBot, { SelectedNodeContext, NodeSuggestion, StructuredPoint } from '@/components/ChatBot'
 import AIConfigPanel from '@/components/AIConfigPanel'
 
 // AI思维导图主页面 - 整合思维导图和AI聊天功能的核心页面
@@ -44,6 +44,22 @@ export default function Home() {
     }
   }
 
+  // 处理结构化分点添加
+  const handleAddStructuredPoints = (points: StructuredPoint[], nodeId?: string) => {
+    console.log('添加结构化分点:', points, '目标节点ID:', nodeId)
+
+    // 获取思维导图组件的方法
+    const mindMapContainer = document.querySelector('[data-mindmap-container]') as any
+    const mindMapMethods = mindMapContainer?._mindMapMethods
+
+    if (mindMapMethods && points.length > 0) {
+      // 直接为每个分点创建子节点，不创建"智能分点"父节点
+      points.forEach(point => {
+        mindMapMethods.addChildNodeWithNote(point.title, point.content, nodeId)
+      })
+    }
+  }
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-50">
       {/* 头部导航 */}
@@ -70,10 +86,7 @@ export default function Home() {
       {/* 主内容区域 */}
       <main className="h-[calc(100vh-4rem)] relative">
         {/* 思维导图区域 */}
-        <div
-          className="w-full h-full"
-          data-mindmap-container
-        >
+        <div className="w-full h-full">
           <MindMap
             onNodeSelect={handleNodeSelect}
             onDataChange={handleDataChange}
@@ -85,6 +98,7 @@ export default function Home() {
         <ChatBot
           selectedNode={selectedNode}
           onAddNode={handleAddNode}
+          onAddStructuredPoints={handleAddStructuredPoints}
         />
 
         {/* AI配置面板 */}

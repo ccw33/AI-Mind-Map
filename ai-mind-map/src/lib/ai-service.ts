@@ -13,9 +13,18 @@ export interface NodeSuggestion {
   description?: string
 }
 
+// 结构化分点接口
+export interface StructuredPoint {
+  id: string
+  title: string // 关键词标题
+  content: string // 详细内容
+  keywords: string[] // 提取的关键词
+}
+
 export interface AIResponse {
   content: string
   suggestions?: NodeSuggestion[]
+  structuredPoints?: StructuredPoint[] // 结构化分点
   usage?: {
     promptTokens: number
     completionTokens: number
@@ -98,6 +107,8 @@ export class AIService {
 
   // 获取系统提示词
   private getSystemPrompt(context?: MindMapContext): string {
+    const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "关键词标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```'
+
     let prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
 
 核心能力：
@@ -107,10 +118,21 @@ export class AIService {
 4. 帮助用户理清思路和逻辑关系
 
 回复要求：
-- 简洁明了，重点突出
-- 提供具体可行的建议
+- 首先提供一个简洁的总体回答（100-200字）
+- 然后提供结构化的分点供用户选择添加到思维导图
 - 保持逻辑性和条理性
-- 回复长度控制在${mindMapAIConfig.maxResponseLength}字符以内`
+- 回复长度控制在${mindMapAIConfig.maxResponseLength}字符以内
+
+重要：请按以下格式回复：
+1. 先给出一个简洁的总体回答
+2. 然后在回答的最后，用以下JSON格式提供结构化分点：
+${jsonExample}
+
+每个分点应该：
+- 有一个简洁的关键词标题（3-8个字）
+- 包含详细的解释内容
+- 可以作为思维导图的节点添加
+- 具有实际价值，帮助用户扩展思维导图`
 
     if (context?.selectedNode) {
       prompt += `
@@ -166,9 +188,11 @@ export class AIService {
     }
 
     const data = await response.json()
+    const rawContent = data.choices[0].message.content
 
     return {
-      content: data.choices[0].message.content,
+      content: this.cleanResponseContent(rawContent),
+      structuredPoints: this.parseStructuredPoints(rawContent),
       usage: data.usage ? {
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,
@@ -310,7 +334,7 @@ export class AIService {
 
     // DeepSeek R1 推理模型会返回 reasoning_content 和 content
     // V3 模型只返回 content
-    const content = data.choices[0].message.content
+    const rawContent = data.choices[0].message.content
     const reasoningContent = data.choices[0].message.reasoning_content
 
     // 如果是推理模型(deepseek-reasoner)，可以在调试模式下显示思维链
@@ -319,7 +343,8 @@ export class AIService {
     }
 
     return {
-      content,
+      content: this.cleanResponseContent(rawContent),
+      structuredPoints: this.parseStructuredPoints(rawContent),
       usage: data.usage ? {
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,
@@ -351,6 +376,35 @@ export class AIService {
     return {
       content: data.message.content
     }
+  }
+
+  // 解析AI回复中的结构化分点
+  private parseStructuredPoints(content: string): StructuredPoint[] {
+    try {
+      // 查找JSON代码块
+      const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/)
+      if (!jsonMatch) {
+        return []
+      }
+
+      const jsonData = JSON.parse(jsonMatch[1])
+      if (jsonData.structuredPoints && Array.isArray(jsonData.structuredPoints)) {
+        return jsonData.structuredPoints.map((point: any, index: number) => ({
+          id: point.id || `point_${index + 1}`,
+          title: point.title || `要点${index + 1}`,
+          content: point.content || '',
+          keywords: Array.isArray(point.keywords) ? point.keywords : []
+        }))
+      }
+    } catch (error) {
+      debugLog('解析结构化分点失败', error)
+    }
+    return []
+  }
+
+  // 清理回复内容（移除JSON代码块）
+  private cleanResponseContent(content: string): string {
+    return content.replace(/```json\s*\{[\s\S]*?\}\s*```/g, '').trim()
   }
 
   // 更新对话历史
