@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import MindMap, { MindMapNode } from '@/components/MindMap'
 import ChatBot, { SelectedNodeContext, NodeSuggestion } from '@/components/ChatBot'
+import AIConfigPanel from '@/components/AIConfigPanel'
 
 // AI思维导图主页面 - 整合思维导图和AI聊天功能的核心页面
 export default function Home() {
@@ -85,6 +86,9 @@ export default function Home() {
           selectedNode={selectedNode}
           onAddNode={handleAddNode}
         />
+
+        {/* AI配置面板 */}
+        <AIConfigPanel />
       </main>
 
       {/* 使用说明浮窗 */}

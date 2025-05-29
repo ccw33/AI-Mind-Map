@@ -73,16 +73,96 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
     scrollToBottom()
   }, [messages])
 
-  // 模拟AI回复 - 实际项目中这里会调用真实的AI API
+  // 调用真实的AI API
+  const callAIService = async (userMessage: string, context?: SelectedNodeContext): Promise<ChatMessage> => {
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          context: context ? {
+            selectedNode: {
+              id: context.id,
+              text: context.text,
+              hierarchy: context.hierarchy
+            },
+            conversationHistory: messages.slice(-10) // 发送最近10条消息作为上下文
+          } : undefined
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'AI服务返回错误')
+      }
+
+      const aiResponse = result.data
+
+      // 解析AI回复中的建议（如果有的话）
+      let suggestions: NodeSuggestion[] = []
+      if (aiResponse.suggestions) {
+        suggestions = aiResponse.suggestions
+      } else if (userMessage.includes('扩展') || userMessage.includes('建议') || userMessage.includes('添加')) {
+        // 如果用户询问扩展建议但AI没有返回结构化建议，尝试生成一些默认建议
+        if (context) {
+          suggestions = [
+            {
+              text: `${context.text}的详细说明`,
+              type: 'child',
+              description: '添加更详细的解释'
+            },
+            {
+              text: `${context.text}的应用场景`,
+              type: 'child',
+              description: '说明具体应用'
+            },
+            {
+              text: `相关概念`,
+              type: 'sibling',
+              description: '添加相关的概念'
+            }
+          ]
+        }
+      }
+
+      return {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: aiResponse.content,
+        timestamp: new Date(),
+        nodeContext: context ? {
+          nodeId: context.id,
+          text: context.text,
+          hierarchy: context.hierarchy
+        } : undefined,
+        suggestions
+      }
+
+    } catch (error) {
+      console.error('AI服务调用失败:', error)
+
+      // 如果AI服务失败，回退到模拟回复
+      return simulateAIResponse(userMessage, context)
+    }
+  }
+
+  // 模拟AI回复（作为备用方案）
   const simulateAIResponse = async (userMessage: string, context?: SelectedNodeContext): Promise<ChatMessage> => {
     // 模拟网络延迟
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000))
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
 
     let content = ''
     let suggestions: NodeSuggestion[] = []
 
     if (context) {
-      // 基于选中节点生成回复
       const nodeText = context.text
       const hierarchy = context.hierarchy.join(' > ')
 
@@ -91,21 +171,12 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
         suggestions = [
           { text: `${nodeText}的定义`, type: 'child', description: '添加定义说明' },
           { text: `${nodeText}的特点`, type: 'child', description: '列举主要特征' },
-          { text: `${nodeText}的应用`, type: 'child', description: '实际应用场景' },
-          { text: `${nodeText}的优势`, type: 'child', description: '优点分析' }
-        ]
-      } else if (userMessage.includes('同级') || userMessage.includes('并列') || userMessage.includes('兄弟节点')) {
-        content = `与"${nodeText}"同级的节点建议：`
-        suggestions = [
-          { text: `相关概念A`, type: 'sibling', description: '同级相关概念' },
-          { text: `相关概念B`, type: 'sibling', description: '同级相关概念' },
-          { text: `对比项`, type: 'sibling', description: '用于对比分析' }
+          { text: `${nodeText}的应用`, type: 'child', description: '实际应用场景' }
         ]
       } else {
         content = `关于"${nodeText}"（位置：${hierarchy}），${generateContextualResponse(userMessage, nodeText)}`
       }
     } else {
-      // 没有选中节点时的通用回复
       content = generateGeneralResponse(userMessage)
     }
 
@@ -166,7 +237,7 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
     setIsLoading(true)
 
     try {
-      const aiResponse = await simulateAIResponse(userMessage.content, selectedNode)
+      const aiResponse = await callAIService(userMessage.content, selectedNode)
       setMessages(prev => [...prev, aiResponse])
     } catch (error) {
       console.error('AI回复失败:', error)
@@ -211,75 +282,117 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
   }
 
   return (
-    <div className={`fixed bottom-4 right-4 w-96 h-[500px] bg-white rounded-lg shadow-xl border flex flex-col ${className}`}>
-      {/* 头部 */}
-      <div className="flex items-center justify-between p-4 border-b bg-blue-600 text-white rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <Bot className="w-5 h-5" />
-          <span className="font-medium">AI助手</span>
+    <div className={`fixed bottom-4 right-4 w-96 h-[600px] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col ${className}`}>
+      {/* 头部 - 更现代的设计 */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <Bot className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <span className="font-semibold text-gray-800">AI助手</span>
+            <div className="text-xs text-gray-500">智能思维导图助手</div>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsMinimized(true)}
-            className="hover:bg-blue-700 p-1 rounded transition-colors"
+            className="hover:bg-gray-100 p-2 rounded-lg transition-colors"
           >
-            <Minimize2 className="w-4 h-4" />
+            <Minimize2 className="w-4 h-4 text-gray-600" />
           </button>
         </div>
       </div>
 
-      {/* 选中节点显示 */}
+      {/* 选中节点显示 - 更精致的样式 */}
       {selectedNode && (
-        <div className="p-3 bg-blue-50 border-b text-sm">
-          <div className="text-blue-800 font-medium">当前选中节点:</div>
-          <div className="text-blue-600">{selectedNode.text}</div>
-          <div className="text-blue-500 text-xs">
-            {selectedNode.hierarchy.join(' > ')}
+        <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <span className="text-sm font-medium text-blue-800">当前选中节点</span>
+          </div>
+          <div className="text-blue-700 font-medium mb-1">{selectedNode.text}</div>
+          <div className="text-blue-500 text-xs flex items-center gap-1">
+            <span>路径:</span>
+            <span className="bg-blue-100 px-2 py-0.5 rounded-full">
+              {selectedNode.hierarchy.join(' › ')}
+            </span>
           </div>
         </div>
       )}
 
-      {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* 消息列表 - chatbot-ui风格 */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((message) => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] ${message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100'} rounded-lg p-3`}>
-              <div className="flex items-start gap-2">
-                {message.role === 'assistant' && <Bot className="w-4 h-4 mt-0.5 text-blue-600" />}
-                {message.role === 'user' && <User className="w-4 h-4 mt-0.5" />}
-                <div className="flex-1">
-                  <div className="text-sm">{message.content}</div>
-                  {message.suggestions && message.suggestions.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-xs font-medium text-gray-600">建议添加:</div>
-                      {message.suggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleAddSuggestion(suggestion)}
-                          className="flex items-center gap-2 w-full text-left p-2 bg-white border rounded hover:bg-gray-50 transition-colors text-xs"
-                        >
-                          <Plus className="w-3 h-3 text-green-600" />
-                          <div>
-                            <div className="font-medium text-gray-800">{suggestion.text}</div>
-                            {suggestion.description && (
-                              <div className="text-gray-500">{suggestion.description}</div>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+            <div className={`flex items-start gap-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              {/* 头像 */}
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                message.role === 'user'
+                  ? 'bg-blue-600'
+                  : 'bg-white border-2 border-gray-200'
+              }`}>
+                {message.role === 'assistant' ? (
+                  <Bot className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
+              </div>
+
+              {/* 消息内容 */}
+              <div className={`rounded-2xl px-4 py-3 ${
+                message.role === 'user'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-200 shadow-sm'
+              }`}>
+                <div className="text-sm leading-relaxed">{message.content}</div>
+
+                {/* 建议按钮 */}
+                {message.suggestions && message.suggestions.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="text-xs font-medium text-gray-500 mb-2">💡 AI建议</div>
+                    {message.suggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleAddSuggestion(suggestion)}
+                        className="block w-full text-left text-xs bg-blue-50 hover:bg-blue-100 rounded-lg p-3 transition-colors border border-blue-200"
+                      >
+                        <div className="font-medium text-blue-800">{suggestion.text}</div>
+                        <div className="text-blue-600 mt-1">
+                          {suggestion.type === 'child' ? '📎 添加为子节点' : '🔗 添加为同级节点'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* 时间戳 */}
+                <div className={`text-xs mt-2 ${
+                  message.role === 'user' ? 'text-blue-200' : 'text-gray-400'
+                }`}>
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
           </div>
         ))}
+
+        {/* 加载状态 */}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg p-3">
-              <div className="flex items-center gap-2">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-white border-2 border-gray-200 flex items-center justify-center">
                 <Bot className="w-4 h-4 text-blue-600" />
-                <div className="text-sm text-gray-600">AI正在思考...</div>
+              </div>
+              <div className="bg-white rounded-2xl px-4 py-3 border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-sm text-gray-600">AI正在思考...</span>
+                </div>
               </div>
             </div>
           </div>
@@ -287,26 +400,39 @@ export default function ChatBot({ selectedNode, onAddNode, className = '' }: Cha
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 输入区域 */}
-      <div className="p-4 border-t">
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={selectedNode ? `询问关于"${selectedNode.text}"的问题...` : "选择一个节点开始对话..."}
-            className="flex-1 resize-none border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows={2}
-            disabled={isLoading}
-          />
+      {/* 输入区域 - chatbot-ui风格 */}
+      <div className="p-4 border-t border-gray-100 bg-white rounded-b-xl">
+        <div className="flex items-end gap-3">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={selectedNode ? `询问关于"${selectedNode.text}"的问题...` : "选择一个节点开始对话..."}
+              className="w-full resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+              rows={2}
+              disabled={isLoading}
+            />
+          </div>
           <button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white p-2 rounded-lg transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-colors shadow-sm"
           >
             <Send className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* 输入提示 */}
+        <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+          <span>按 Enter 发送，Shift + Enter 换行</span>
+          {selectedNode && (
+            <span className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+              已选中节点
+            </span>
+          )}
         </div>
       </div>
     </div>

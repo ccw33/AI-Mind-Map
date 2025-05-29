@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup": "node scripts/check-config.js && echo '\n🚀 运行 npm run dev 启动应用'",
+    "check-config": "node scripts/check-config.js",
+    "setup-interactive": "./scripts/setup.sh"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

@@ -18,13 +18,57 @@
 - Node.js 18+
 - npm 或 yarn
 
-### 安装依赖
+### 方式一：自动设置（推荐）
+
+运行设置脚本，自动完成环境配置：
+
+**Linux/macOS:**
+```bash
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+**Windows:**
+```cmd
+scripts\setup.bat
+```
+
+### 方式二：手动设置
+
+#### 安装依赖
 
 ```bash
 npm install
 ```
 
-### 启动开发服务器
+#### 配置AI服务（可选）
+
+复制环境变量示例文件：
+```bash
+cp .env.local.example .env.local
+```
+
+编辑 `.env.local` 文件，配置您的AI服务：
+
+```bash
+# 选择AI提供商
+DEFAULT_AI_PROVIDER=openai
+
+# 配置OpenAI (推荐)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_DEFAULT_MODEL=gpt-3.5-turbo
+
+# 或配置DeepSeek (性价比高)
+# DEEPSEEK_API_KEY=your-deepseek-api-key
+# DEEPSEEK_DEFAULT_MODEL=deepseek-chat
+# DEFAULT_AI_PROVIDER=deepseek
+
+# 或配置其他AI服务...
+```
+
+**详细配置说明请参考 [AI_CONFIG_GUIDE.md](./AI_CONFIG_GUIDE.md)**
+
+#### 启动开发服务器
 
 ```bash
 npm run dev
@@ -37,7 +81,8 @@ npm run dev
 1. **选择节点**: 点击思维导图中的任意节点
 2. **AI对话**: 在右下角AI助手中输入问题
 3. **获取建议**: AI会基于选中节点提供相关建议
-4. **一键添加**: 点击建议旁的 ➕ 按钮添加到思维导图
+4. **一键添加**: 点击建议按钮直接添加到思维导图
+5. **配置AI**: 点击右上角设置图标配置AI服务
 
 ## 🏗️ 技术架构
 
@@ -111,12 +156,14 @@ const mindMap = new MindMapLib({
 
 ## 🔮 未来计划
 
-- [ ] 集成真实AI API (OpenAI, Claude等)
+- [x] 集成真实AI API (OpenAI, Claude, Gemini, Ollama等)
+- [x] AI配置管理界面
 - [ ] 支持多人协作编辑
 - [ ] 数据云端同步
 - [ ] 更多思维导图模板
 - [ ] 导出为多种格式
 - [ ] 移动端优化
+- [ ] AI建议的智能化优化
 
 ## 🤝 贡献指南
 
