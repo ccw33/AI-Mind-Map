@@ -253,7 +253,7 @@ export default {
     this.$bus.$on('localStorageExceeded', this.onLocalStorageExceeded)
     window.addEventListener('resize', this.handleResize)
     this.$bus.$on('showDownloadTip', this.showDownloadTip)
-    this.webTip()
+    // this.webTip() // 移除重要提示弹窗
   },
   beforeDestroy() {
     this.$bus.$off('execCommand', this.execCommand)

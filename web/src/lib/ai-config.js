@@ -61,12 +61,12 @@ export function getCurrentAIConfig() {
 // 验证AI配置
 export function validateAIConfig(config) {
   if (!config) return false
-  
+
   // 检查必需字段
   if (!config.provider || !config.model) {
     return false
   }
-  
+
   // 根据提供商检查特定字段
   switch (config.provider) {
     case AI_PROVIDERS.OPENAI:
@@ -92,7 +92,7 @@ export function getProviderConfig(provider) {
     [AI_PROVIDERS.DEEPSEEK]: {
       name: 'DeepSeek',
       baseURL: 'https://api.deepseek.com/v1',
-      models: ['deepseek-chat', 'deepseek-coder'],
+      models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
       requiresApiKey: true
     },
     [AI_PROVIDERS.ANTHROPIC]: {
@@ -114,7 +114,7 @@ export function getProviderConfig(provider) {
       requiresApiKey: false
     }
   }
-  
+
   return configs[provider] || configs[AI_PROVIDERS.OPENAI]
 }
 

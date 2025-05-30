@@ -176,8 +176,8 @@ const defaultBtnList = [
   'formula',
   // 'attachment',
   'outerFrame',
-  'annotation',
-  'ai'
+  'annotation'
+  // 'ai' // 移除AI按钮
 ]
 
 export default {
@@ -224,11 +224,7 @@ export default {
           return item !== 'formula'
         })
       }
-      if (!this.enableAi) {
-        res = res.filter(item => {
-          return item !== 'ai'
-        })
-      }
+      // AI按钮已从defaultBtnList中移除，不再需要过滤逻辑
       return res
     }
   },
