@@ -93,8 +93,9 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 380px;
-  max-height: 600px;
+  width: 520px;
+  max-height: 95vh;
+  min-height: 400px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -104,10 +105,57 @@
   z-index: 10000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   transition: all 0.3s ease;
+  resize: both;
+  overflow: hidden;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .ai-chat-bot {
+    width: calc(100vw - 20px);
+    height: 95vh;
+    max-height: 95vh;
+    bottom: 10px;
+    right: 10px;
+    left: 10px;
+    resize: none;
+    border-radius: 8px;
+  }
+
+  .ai-chat-bot.minimized {
+    height: 50px;
+    max-height: 50px;
+    min-height: 50px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-chat-bot {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    top: 0;
+    border-radius: 0;
+    resize: none;
+  }
+
+  .ai-chat-bot.minimized {
+    height: 60px;
+    max-height: 60px;
+    min-height: 60px;
+    top: auto;
+    bottom: 0;
+  }
 }
 
 .ai-chat-bot.minimized {
   max-height: 50px;
+  min-height: 50px;
+  height: 50px;
+  resize: none;
 }
 
 .ai-chat-bot.minimized .chat-messages,
@@ -176,7 +224,8 @@
   flex: 1;
   padding: 16px;
   overflow-y: auto;
-  max-height: 400px;
+  min-height: 300px;
+  max-height: calc(95vh - 200px);
   background: #fff;
 }
 
@@ -321,50 +370,67 @@
 
 .chat-input {
   border-top: 1px solid #e8e8e8;
-  padding: 12px 16px;
+  padding: 16px;
   background: #fff;
   border-radius: 0 0 12px 12px;
 }
 
 .input-container {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 12px;
+  align-items: flex-end;
 }
 
 .message-input {
-  width: 100%;
+  flex: 1;
   border: 1px solid #e8e8e8;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 12px 16px;
   font-size: 14px;
-  resize: none;
+  resize: vertical;
   outline: none;
   font-family: inherit;
+  min-height: 60px;
+  max-height: 120px;
+  line-height: 1.5;
+  transition: border-color 0.3s ease;
 }
 
 .message-input:focus {
   border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
 }
 
 .message-input:disabled {
   background: #f5f5f5;
   color: #999;
+  cursor: not-allowed;
+}
+
+.message-input::placeholder {
+  color: #999;
+  font-size: 13px;
 }
 
 .input-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .send-btn {
-  padding: 8px 16px;
+  padding: 12px 20px;
   background: #409eff;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
+  min-height: 60px;
+  white-space: nowrap;
+  transition: background-color 0.3s ease;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -376,11 +442,20 @@
   cursor: not-allowed;
 }
 
+/* 手机版优化发送按钮 */
+@media (max-width: 480px) {
+  .send-btn {
+    min-height: 50px;
+    padding: 10px 16px;
+    font-size: 16px;
+  }
+}
+
 /* AI配置面板样式 */
 .ai-config-panel {
   position: fixed;
   bottom: 20px;
-  right: 420px;
+  right: 560px;
   width: 350px;
   background: white;
   border-radius: 12px;
@@ -388,6 +463,33 @@
   border: 1px solid #e8e8e8;
   z-index: 10001;
   font-family: inherit;
+}
+
+/* 响应式设计 - 配置面板 */
+@media (max-width: 1200px) {
+  .ai-config-panel {
+    right: 20px;
+    bottom: calc(80vh + 40px);
+  }
+}
+
+@media (max-width: 768px) {
+  .ai-config-panel {
+    right: 20px;
+    left: 20px;
+    width: auto;
+    bottom: calc(100vh - 40px);
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-config-panel {
+    right: 0;
+    left: 0;
+    width: 100vw;
+    bottom: 100vh;
+    border-radius: 0;
+  }
 }
 
 .config-header {
