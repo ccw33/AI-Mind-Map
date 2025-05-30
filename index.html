@@ -1324,13 +1324,13 @@ async function callRealAI(message) {
 
 // 获取系统提示词
 function getSystemPrompt() {
-  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "关键词标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
+  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
 
   let prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
 
 核心能力：
 1. 分析思维导图节点内容
-2. 提供相关的子节点和同级节点建议
+2. 提供相关的子节点建议
 3. 回答与节点内容相关的问题
 4. 帮助用户理清思路和逻辑关系
 
@@ -1338,7 +1338,6 @@ function getSystemPrompt() {
 - 首先提供一个简洁的总体回答（100-200字）
 - 然后提供结构化的分点供用户选择添加到思维导图
 - 保持逻辑性和条理性
-- 回复长度控制在1500字符以内
 
 重要：请按以下格式回复：
 1. 先给出一个简洁的总体回答
@@ -1346,7 +1345,7 @@ function getSystemPrompt() {
 ${jsonExample}
 
 每个分点应该：
-- 有一个简洁的关键词标题（3-8个字）
+- 有一个简洁的标题
 - 包含详细的解释内容
 - 可以作为思维导图的节点添加
 - 具有实际价值，帮助用户扩展思维导图`;
@@ -1381,7 +1380,7 @@ ${index + 1}. 节点："${nodeInfo.text}"`;
 
     prompt += `
 
-- 请基于这个节点的上下文和链路信息来回答用户的问题，并提供相关的扩展建议`;
+- 请基于这个节点的上下文和链路信息来回答用户的问题`;
   }
 
   return prompt;
