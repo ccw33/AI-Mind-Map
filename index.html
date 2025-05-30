@@ -9,7 +9,1874 @@
         })
       } catch (error) {
         console.log(error)
-      }</script><link href="dist/css/chunk-vendors.css?685589f1058f5fbca0d2" rel="stylesheet"><link href="dist/css/app.css?685589f1058f5fbca0d2" rel="stylesheet"></head><body><noscript><strong>We're sorry but thoughts doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div><script>const getDataFromBackend = () => {
+      }</script><link href="dist/css/chunk-vendors.css?685589f1058f5fbca0d2" rel="stylesheet"><link href="dist/css/app.css?685589f1058f5fbca0d2" rel="stylesheet"></head><body><noscript><strong>We're sorry but thoughts doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div>
+
+<!-- AI聊天浮窗 -->
+<div id="aiChatBot" class="ai-chat-bot" style="display: none;">
+  <div class="chat-header" onclick="toggleMinimize()">
+    <div class="header-left">
+      <span class="ai-icon">🤖</span>
+      <span class="title">AI助手</span>
+      <span id="contextInfo" class="context-info"></span>
+    </div>
+    <div class="header-actions">
+      <button onclick="syncCurrentActiveNode()" title="同步当前选中节点" style="background: #4CAF50; color: white; border: none; border-radius: 4px; padding: 4px 6px; margin-right: 4px;">🔄</button>
+      <button onclick="clearMessages()" title="清除记录">🗑️</button>
+      <button onclick="showConfig()" title="设置">⚙️</button>
+      <button onclick="toggleMinimize()" id="minimizeBtn" title="最小化">⬇️</button>
+    </div>
+  </div>
+
+  <div id="chatMessages" class="chat-messages">
+    <div class="welcome-message">
+      <div class="welcome-content">
+        <span class="ai-icon">🤖</span>
+        <h3>AI思维导图助手</h3>
+        <p>点击思维导图节点开始对话</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="chatInput" class="chat-input">
+    <div class="input-container">
+      <textarea
+        id="messageInput"
+        class="message-input"
+        placeholder="请先选择思维导图节点"
+        rows="2"
+        onkeydown="handleKeyDown(event)"
+      ></textarea>
+      <div class="input-actions">
+        <button id="sendBtn" class="send-btn" onclick="sendMessage()">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI配置面板 -->
+<div id="aiConfigPanel" class="ai-config-panel" style="display: none;">
+  <div class="config-header">
+    <h4>AI配置</h4>
+    <button onclick="closeConfig()">❌</button>
+  </div>
+  <div class="config-content">
+    <div class="config-item">
+      <label>AI提供商:</label>
+      <select id="aiProvider">
+        <option value="openai">OpenAI</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="ollama">Ollama</option>
+      </select>
+    </div>
+    <div class="config-item">
+      <label>API Key:</label>
+      <input id="apiKey" type="password" placeholder="请输入API Key">
+    </div>
+    <div class="config-item">
+      <label>模型:</label>
+      <input id="aiModel" placeholder="gpt-3.5-turbo">
+    </div>
+    <div class="config-item">
+      <label>基础URL:</label>
+      <input id="baseURL" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="config-actions">
+      <button onclick="saveConfig()">保存配置</button>
+      <button onclick="testConnection()">测试连接</button>
+    </div>
+  </div>
+</div>
+
+<style>
+/* AI聊天浮窗样式 */
+.ai-chat-bot {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 380px;
+  max-height: 600px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: all 0.3s ease;
+}
+
+.ai-chat-bot.minimized {
+  max-height: 50px;
+}
+
+.ai-chat-bot.minimized .chat-messages,
+.ai-chat-bot.minimized .chat-input {
+  display: none;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8e8e8;
+  border-radius: 12px 12px 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-icon {
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.title {
+  font-weight: 600;
+  color: #333;
+  margin-right: 8px;
+}
+
+.context-info {
+  font-size: 12px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.header-actions button:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 400px;
+  background: #fff;
+}
+
+.welcome-message {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.welcome-content .ai-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.welcome-content h3 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.welcome-content p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+}
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.quick-actions button {
+  padding: 6px 12px;
+  background: #409eff;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.quick-actions button:hover {
+  background: #337ecc;
+}
+
+.message-item {
+  display: flex;
+  margin-bottom: 16px;
+  align-items: flex-start;
+}
+
+.message-item.user {
+  flex-direction: row-reverse;
+}
+
+.message-item.user .message-content {
+  background: #409eff;
+  color: #fff;
+  margin-right: 12px;
+  margin-left: 0;
+}
+
+.message-item.assistant .message-content {
+  background: #f5f5f5;
+  color: #333;
+  margin-left: 12px;
+}
+
+.message-item.system {
+  justify-content: center;
+}
+
+.message-item.system .message-content {
+  background: #e8f4fd;
+  color: #409eff;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  margin: 0;
+}
+
+.message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.message-content {
+  max-width: 280px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  position: relative;
+}
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.suggestions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.suggestions-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.suggestions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggestion-btn {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: #409eff;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.suggestion-btn:hover {
+  background: #337ecc;
+}
+
+.chat-input {
+  border-top: 1px solid #e8e8e8;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+}
+
+.input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-input {
+  width: 100%;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.message-input:focus {
+  border-color: #409eff;
+}
+
+.message-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.input-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.send-btn {
+  padding: 8px 16px;
+  background: #409eff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #337ecc;
+}
+
+.send-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* AI配置面板样式 */
+.ai-config-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 420px;
+  width: 350px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid #e8e8e8;
+  z-index: 10001;
+  font-family: inherit;
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #e8e8e8;
+  background: #f8f9fa;
+  border-radius: 12px 12px 0 0;
+}
+
+.config-header h4 {
+  margin: 0;
+  color: #333;
+}
+
+.config-header button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.config-content {
+  padding: 16px;
+}
+
+.config-item {
+  margin-bottom: 16px;
+}
+
+.config-item label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #333;
+}
+
+.config-item input,
+.config-item select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.config-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.config-actions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.config-actions button:first-child {
+  background: #409eff;
+  color: white;
+}
+
+.config-actions button:last-child {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* 结构化分点样式 */
+.structured-points {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.points-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.points-title {
+  font-size: 12px;
+  color: #666;
+  font-weight: 600;
+}
+
+.points-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.select-all-btn,
+.add-selected-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid #409eff;
+  background: white;
+  color: #409eff;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.select-all-btn:hover,
+.add-selected-btn:hover {
+  background: #409eff;
+  color: white;
+}
+
+.add-selected-btn {
+  background: #409eff;
+  color: white;
+}
+
+.add-selected-btn:hover {
+  background: #337ecc;
+}
+
+.points-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.structured-point {
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fafafa;
+}
+
+.point-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.point-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
+.point-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  margin: 0;
+}
+
+.point-content {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  padding-left: 20px;
+}
+
+.point-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.keyword {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #e8f4fd;
+  color: #409eff;
+  border-radius: 8px;
+  border: 1px solid #b3d8ff;
+}
+
+/* 选中节点显示样式 */
+.selected-node-display {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #e8f4fd 0%, #f0f8ff 100%);
+  border-bottom: 1px solid #b3d8ff;
+  display: none;
+}
+
+.selected-node-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  background: #409eff;
+  border-radius: 50%;
+  animation: pulse-dot 2s infinite;
+}
+
+.indicator-text {
+  font-size: 11px;
+  color: #409eff;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.node-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c5aa0;
+  margin: 2px 0;
+}
+
+.node-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.path-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.path-text {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  font-family: monospace;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+
+/* 通知动画 */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+</style>
+
+<script>
+// AI聊天功能JavaScript代码
+let selectedNodeText = '';
+let selectedNodeHierarchy = [];
+let messages = [];
+let isLoading = false;
+let isMinimized = false;
+let mindMapInstance = null;
+let aiConfig = {
+  provider: 'openai',
+  apiKey: '',
+  model: 'gpt-3.5-turbo',
+  baseURL: 'https://api.openai.com/v1'
+};
+
+// 初始化AI聊天功能
+function initAIChat() {
+  // 显示AI聊天浮窗
+  document.getElementById('aiChatBot').style.display = 'flex';
+
+  // 加载AI配置
+  loadAIConfig();
+
+  // 监听思维导图事件
+  if (window.$bus) {
+    window.$bus.$on('app_inited', (mindMap) => {
+      console.log('思维导图初始化完成:', mindMap);
+      mindMapInstance = mindMap;
+      bindMindMapEvents(mindMap);
+    });
+  }
+
+  // 增强的思维导图实例检测
+  const checkMindMapInstance = () => {
+    // 方法1: 检查全局变量
+    if (window.mindMap && !mindMapInstance) {
+      console.log('从全局获取思维导图实例:', window.mindMap);
+      mindMapInstance = window.mindMap;
+      bindMindMapEvents(mindMapInstance);
+      return true;
+    }
+
+    if (window.app && window.app.mindMap && !mindMapInstance) {
+      console.log('从app获取思维导图实例:', window.app.mindMap);
+      mindMapInstance = window.app.mindMap;
+      bindMindMapEvents(mindMapInstance);
+      return true;
+    }
+
+    // 方法2: 从Vue实例获取
+    const mindMapContainer = document.querySelector('#app');
+    if (mindMapContainer && mindMapContainer.__vue__) {
+      const vueInstance = mindMapContainer.__vue__;
+
+      // 检查Vue实例的子组件
+      if (vueInstance.$children && vueInstance.$children.length > 0) {
+        for (let child of vueInstance.$children) {
+          if (child.mindMap && !mindMapInstance) {
+            console.log('从Vue子组件获取思维导图实例:', child.mindMap);
+            mindMapInstance = child.mindMap;
+            bindMindMapEvents(mindMapInstance);
+            return true;
+          }
+
+          // 深度检查子组件的子组件
+          if (child.$children && child.$children.length > 0) {
+            for (let grandChild of child.$children) {
+              if (grandChild.mindMap && !mindMapInstance) {
+                console.log('从Vue孙组件获取思维导图实例:', grandChild.mindMap);
+                mindMapInstance = grandChild.mindMap;
+                bindMindMapEvents(mindMapInstance);
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 方法3: 通过DOM事件监听获取
+    if (!mindMapInstance) {
+      setupDOMEventListeners();
+    }
+
+    return false;
+  };
+
+  // 设置DOM事件监听器来捕获思维导图交互
+  const setupDOMEventListeners = () => {
+    const svgElements = document.querySelectorAll('svg');
+    svgElements.forEach(svg => {
+      // 监听SVG点击事件
+      svg.addEventListener('click', (e) => {
+        // 尝试从事件中获取思维导图实例
+        setTimeout(() => {
+          tryGetMindMapFromDOM();
+        }, 100);
+      });
+    });
+  };
+
+  // 从DOM状态尝试获取思维导图实例
+  const tryGetMindMapFromDOM = () => {
+    if (mindMapInstance) return;
+
+    const mindMapContainer = document.querySelector('#app');
+    if (mindMapContainer && mindMapContainer.__vue__) {
+      const vueInstance = mindMapContainer.__vue__;
+
+      // 递归搜索所有Vue组件实例
+      const findMindMapInVueTree = (component) => {
+        if (component.mindMap) {
+          return component.mindMap;
+        }
+
+        if (component.$children) {
+          for (let child of component.$children) {
+            const result = findMindMapInVueTree(child);
+            if (result) return result;
+          }
+        }
+
+        return null;
+      };
+
+      const foundMindMap = findMindMapInVueTree(vueInstance);
+      if (foundMindMap) {
+        console.log('通过递归搜索找到思维导图实例:', foundMindMap);
+        mindMapInstance = foundMindMap;
+        bindMindMapEvents(mindMapInstance);
+
+        // 立即尝试同步当前激活节点
+        setTimeout(() => {
+          syncCurrentActiveNode();
+        }, 500);
+      }
+    }
+  };
+
+  // 定期检查思维导图实例
+  const checkInterval = setInterval(() => {
+    if (checkMindMapInstance()) {
+      clearInterval(checkInterval);
+    }
+  }, 1000);
+
+  // 10秒后停止检查
+  setTimeout(() => {
+    clearInterval(checkInterval);
+    // 如果还没找到，尝试最后一次DOM搜索
+    if (!mindMapInstance) {
+      console.log('最后尝试从DOM获取思维导图实例...');
+      tryGetMindMapFromDOM();
+    }
+  }, 10000);
+}
+
+// 绑定思维导图事件
+function bindMindMapEvents(mindMap) {
+  console.log('绑定思维导图事件', mindMap);
+
+  // 监听节点点击事件
+  mindMap.on('node_click', (node) => {
+    console.log('节点被点击:', node);
+    updateSelectedNode(node);
+  });
+
+  // 监听节点激活事件
+  mindMap.on('node_active', (node, activeNodeList) => {
+    console.log('节点激活:', node, activeNodeList);
+    if (activeNodeList && activeNodeList.length > 0) {
+      updateSelectedNode(activeNodeList[0]);
+    } else {
+      selectedNodeText = '';
+      selectedNodeHierarchy = [];
+      updateContextInfo();
+    }
+  });
+
+  // 监听数据变化事件
+  mindMap.on('data_change', (data) => {
+    console.log('思维导图数据变化:', data);
+  });
+
+  // 添加定时检查激活节点的机制
+  const checkActiveNodes = () => {
+    try {
+      if (mindMap.renderer && mindMap.renderer.activeNodeList) {
+        const activeNodes = mindMap.renderer.activeNodeList;
+        if (activeNodes.length > 0) {
+          const currentActiveNode = activeNodes[0];
+          const currentText = currentActiveNode.nodeData ?
+            currentActiveNode.nodeData.data.text :
+            (currentActiveNode.getData ? currentActiveNode.getData('text') : '');
+
+          // 如果当前激活节点与记录的不同，更新选中节点
+          if (currentText && currentText !== selectedNodeText) {
+            console.log('检测到新的激活节点:', currentText);
+            updateSelectedNode(currentActiveNode);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('检查激活节点失败:', error);
+    }
+  };
+
+  // 每秒检查一次激活节点
+  setInterval(checkActiveNodes, 1000);
+}
+
+// 更新选中节点
+function updateSelectedNode(node) {
+  if (!node) {
+    selectedNodeText = '';
+    selectedNodeHierarchy = [];
+    updateContextInfo();
+    return;
+  }
+
+  try {
+    // 正确获取节点文本 - 参考ai-mind-map的实现
+    let rawText = node.nodeData ? node.nodeData.data.text : (node.getData ? node.getData('text') : '');
+
+    // 清理HTML标签，只保留纯文本
+    if (typeof rawText === 'string') {
+      // 创建临时DOM元素来解析HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = rawText;
+      selectedNodeText = tempDiv.textContent || tempDiv.innerText || rawText;
+    } else {
+      selectedNodeText = rawText || '';
+    }
+
+    selectedNodeHierarchy = getNodeHierarchy(node);
+    updateContextInfo();
+    showQuickActions();
+
+    console.log('节点选择成功:', {
+      text: selectedNodeText,
+      hierarchy: selectedNodeHierarchy,
+      node: node,
+      nodeData: node.nodeData
+    });
+  } catch (error) {
+    console.error('获取节点信息失败:', error);
+    selectedNodeText = '';
+    selectedNodeHierarchy = [];
+    updateContextInfo();
+  }
+}
+
+// 获取节点层级路径
+function getNodeHierarchy(node) {
+  const hierarchy = [];
+  let currentNode = node;
+
+  while (currentNode) {
+    try {
+      // 正确获取节点文本 - 兼容不同的节点数据结构
+      let rawText = '';
+      if (currentNode.nodeData && currentNode.nodeData.data) {
+        rawText = currentNode.nodeData.data.text || '';
+      } else if (currentNode.getData) {
+        rawText = currentNode.getData('text') || '';
+      }
+
+      // 清理HTML标签，只保留纯文本
+      let text = '';
+      if (typeof rawText === 'string') {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = rawText;
+        text = tempDiv.textContent || tempDiv.innerText || rawText;
+      } else {
+        text = rawText || '';
+      }
+
+      if (text) {
+        hierarchy.unshift(text);
+      }
+      currentNode = currentNode.parent;
+    } catch (error) {
+      console.error('获取父节点失败:', error);
+      break;
+    }
+  }
+
+  return hierarchy;
+}
+
+// 更新上下文信息
+function updateContextInfo() {
+  const contextInfo = document.getElementById('contextInfo');
+  const messageInput = document.getElementById('messageInput');
+
+  if (selectedNodeText) {
+    const hierarchyText = selectedNodeHierarchy.length > 1
+      ? selectedNodeHierarchy.join(' › ')
+      : selectedNodeText;
+    contextInfo.textContent = `- ${selectedNodeText}`;
+    contextInfo.title = `路径: ${hierarchyText}`;
+    messageInput.placeholder = `询问关于"${selectedNodeText}"的问题...`;
+
+    // 更新聊天窗口中的选中节点显示
+    updateSelectedNodeDisplay();
+  } else {
+    contextInfo.textContent = '';
+    contextInfo.title = '';
+    messageInput.placeholder = '请先选择思维导图节点';
+    hideSelectedNodeDisplay();
+  }
+}
+
+// 更新选中节点显示区域
+function updateSelectedNodeDisplay() {
+  let nodeDisplay = document.getElementById('selectedNodeDisplay');
+
+  if (!nodeDisplay) {
+    // 创建选中节点显示区域
+    nodeDisplay = document.createElement('div');
+    nodeDisplay.id = 'selectedNodeDisplay';
+    nodeDisplay.className = 'selected-node-display';
+
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages && chatMessages.parentNode) {
+      chatMessages.parentNode.insertBefore(nodeDisplay, chatMessages);
+    } else {
+      // 如果找不到chatMessages，尝试插入到聊天窗口中
+      const chatWindow = document.getElementById('aiChatWindow');
+      if (chatWindow) {
+        const header = chatWindow.querySelector('.chat-header');
+        if (header && header.nextSibling) {
+          chatWindow.insertBefore(nodeDisplay, header.nextSibling);
+        } else {
+          chatWindow.appendChild(nodeDisplay);
+        }
+      }
+    }
+  }
+
+  if (selectedNodeText && selectedNodeHierarchy.length > 0) {
+    nodeDisplay.innerHTML = `
+      <div class="selected-node-content">
+        <div class="node-indicator">
+          <div class="indicator-dot"></div>
+          <span class="indicator-text">当前选中节点</span>
+        </div>
+        <div class="node-text">${selectedNodeText}</div>
+        <div class="node-path">
+          <span class="path-label">路径:</span>
+          <span class="path-text">${selectedNodeHierarchy.join(' › ')}</span>
+        </div>
+      </div>
+    `;
+
+    nodeDisplay.style.display = 'block';
+    console.log('选中节点显示区域已更新:', selectedNodeText, selectedNodeHierarchy);
+  } else {
+    nodeDisplay.style.display = 'none';
+  }
+}
+
+// 隐藏选中节点显示
+function hideSelectedNodeDisplay() {
+  const nodeDisplay = document.getElementById('selectedNodeDisplay');
+  if (nodeDisplay) {
+    nodeDisplay.style.display = 'none';
+  }
+}
+
+// 显示快速操作
+function showQuickActions() {
+  if (!selectedNodeText) return;
+
+  const welcomeMessage = document.querySelector('.welcome-message');
+  if (welcomeMessage && messages.length === 0) {
+    welcomeMessage.innerHTML = `
+      <div class="welcome-content">
+        <span class="ai-icon">🤖</span>
+        <h3>AI思维导图助手</h3>
+        <p>当前选中：${selectedNodeText}</p>
+        <div class="quick-actions">
+          <button onclick="sendQuickMessage('扩展这个节点')">扩展节点</button>
+          <button onclick="sendQuickMessage('解释这个概念')">解释概念</button>
+          <button onclick="sendQuickMessage('相关应用场景')">应用场景</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// 发送快速消息
+function sendQuickMessage(message) {
+  document.getElementById('messageInput').value = message;
+  sendMessage();
+}
+
+// 发送消息
+async function sendMessage() {
+  const input = document.getElementById('messageInput');
+  const message = input.value.trim();
+
+  if (!message || isLoading) return;
+
+  input.value = '';
+
+  // 添加用户消息
+  addMessage('user', message);
+
+  // 设置加载状态
+  setLoading(true);
+
+  try {
+    // 调用AI API或模拟回复
+    const response = await callAI(message);
+    addMessage('assistant', response.content, response.suggestions, response.structuredPoints);
+  } catch (error) {
+    console.error('AI回复失败:', error);
+    addMessage('assistant', '抱歉，我现在无法回复。请检查AI配置或稍后再试。');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// 调用AI API
+async function callAI(message) {
+  // 如果配置了真实的API Key，调用真实API
+  if (aiConfig.apiKey && aiConfig.apiKey.trim()) {
+    return await callRealAI(message);
+  } else {
+    // 否则使用模拟回复
+    return await simulateAIResponse(message);
+  }
+}
+
+// 调用真实AI API
+async function callRealAI(message) {
+  const { provider, apiKey, model, baseURL } = aiConfig;
+
+  // 构建系统提示词
+  const systemPrompt = getSystemPrompt();
+
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt
+    },
+    {
+      role: 'user',
+      content: message
+    }
+  ];
+
+  const response = await fetch(`${baseURL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 2000,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const rawContent = data.choices[0].message.content;
+
+  // 解析回复内容
+  const content = cleanResponseContent(rawContent);
+  const suggestions = extractSuggestions(rawContent);
+  const structuredPoints = parseStructuredPoints(rawContent);
+
+  return { content, suggestions, structuredPoints };
+}
+
+// 获取系统提示词
+function getSystemPrompt() {
+  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "关键词标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
+
+  let prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
+
+核心能力：
+1. 分析思维导图节点内容
+2. 提供相关的子节点和同级节点建议
+3. 回答与节点内容相关的问题
+4. 帮助用户理清思路和逻辑关系
+
+回复要求：
+- 首先提供一个简洁的总体回答（100-200字）
+- 然后提供结构化的分点供用户选择添加到思维导图
+- 保持逻辑性和条理性
+- 回复长度控制在1500字符以内
+
+重要：请按以下格式回复：
+1. 先给出一个简洁的总体回答
+2. 然后在回答的最后，用以下JSON格式提供结构化分点：
+${jsonExample}
+
+每个分点应该：
+- 有一个简洁的关键词标题（3-8个字）
+- 包含详细的解释内容
+- 可以作为思维导图的节点添加
+- 具有实际价值，帮助用户扩展思维导图`;
+
+  if (selectedNodeText && selectedNodeHierarchy.length > 0) {
+    prompt += `
+
+当前上下文：
+- 选中节点：${selectedNodeText}
+- 节点路径：${selectedNodeHierarchy.join(' > ')}
+- 请基于这个节点的上下文来回答用户的问题，并提供相关的扩展建议`;
+  }
+
+  return prompt;
+}
+
+// 清理AI回复内容
+function cleanResponseContent(content) {
+  // 移除JSON代码块，只保留文本内容
+  return content.replace(/```json[\s\S]*?```/g, '').trim();
+}
+
+// 解析结构化分点
+function parseStructuredPoints(content) {
+  try {
+    // 查找JSON代码块
+    const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+    if (!jsonMatch) {
+      return [];
+    }
+
+    const jsonData = JSON.parse(jsonMatch[1]);
+    if (jsonData.structuredPoints && Array.isArray(jsonData.structuredPoints)) {
+      return jsonData.structuredPoints.map((point, index) => ({
+        id: point.id || `point_${index + 1}`,
+        title: point.title || `要点${index + 1}`,
+        content: point.content || '',
+        keywords: Array.isArray(point.keywords) ? point.keywords : []
+      }));
+    }
+  } catch (error) {
+    console.error('解析结构化分点失败:', error);
+  }
+  return [];
+}
+
+// 模拟AI回复
+async function simulateAIResponse(message) {
+  // 模拟网络延迟
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  let content = '';
+  let suggestions = [];
+  let structuredPoints = [];
+
+  if (message.includes('扩展')) {
+    content = `关于"${selectedNodeText}"的扩展建议：\n\n我为您提供了详细的扩展方案，包括多个维度的分析。`;
+    suggestions = [
+      { text: '定义和概念', type: 'child' },
+      { text: '应用场景', type: 'child' },
+      { text: '相关技术', type: 'child' }
+    ];
+
+    // 生成结构化分点
+    structuredPoints = [
+      {
+        id: 'point_1',
+        title: '基础概念',
+        content: `${selectedNodeText}的核心定义和基本原理`,
+        keywords: ['定义', '原理', '基础']
+      },
+      {
+        id: 'point_2',
+        title: '技术特点',
+        content: `${selectedNodeText}的主要技术特征和优势`,
+        keywords: ['特点', '优势', '技术']
+      },
+      {
+        id: 'point_3',
+        title: '应用领域',
+        content: `${selectedNodeText}在各个行业的具体应用`,
+        keywords: ['应用', '行业', '实践']
+      },
+      {
+        id: 'point_4',
+        title: '发展趋势',
+        content: `${selectedNodeText}的未来发展方向和趋势`,
+        keywords: ['趋势', '发展', '未来']
+      }
+    ];
+  } else if (message.includes('解释')) {
+    content = `"${selectedNodeText}"的详细解释：\n\n我为您提供了全面的解释，包含多个层面的分析。`;
+    suggestions = [
+      { text: '核心特点', type: 'child' },
+      { text: '工作原理', type: 'child' }
+    ];
+
+    structuredPoints = [
+      {
+        id: 'explain_1',
+        title: '基本含义',
+        content: `${selectedNodeText}的基本定义和含义`,
+        keywords: ['定义', '含义', '基本']
+      },
+      {
+        id: 'explain_2',
+        title: '核心要素',
+        content: `构成${selectedNodeText}的关键要素和组成部分`,
+        keywords: ['要素', '组成', '核心']
+      },
+      {
+        id: 'explain_3',
+        title: '运作机制',
+        content: `${selectedNodeText}的工作原理和运作方式`,
+        keywords: ['原理', '机制', '运作']
+      }
+    ];
+  } else if (message.includes('应用')) {
+    content = `"${selectedNodeText}"的应用场景分析：\n\n我整理了多个实际应用场景供您参考。`;
+    suggestions = [
+      { text: '商业应用', type: 'child' },
+      { text: '技术应用', type: 'child' }
+    ];
+
+    structuredPoints = [
+      {
+        id: 'app_1',
+        title: '商业场景',
+        content: `${selectedNodeText}在商业环境中的应用`,
+        keywords: ['商业', '企业', '市场']
+      },
+      {
+        id: 'app_2',
+        title: '技术场景',
+        content: `${selectedNodeText}在技术开发中的应用`,
+        keywords: ['技术', '开发', '工程']
+      },
+      {
+        id: 'app_3',
+        title: '教育场景',
+        content: `${selectedNodeText}在教育培训中的应用`,
+        keywords: ['教育', '培训', '学习']
+      }
+    ];
+  } else {
+    content = `关于"${selectedNodeText}"，我理解您的问题。这是一个很有趣的话题，我为您提供了多角度的分析。`;
+    suggestions = [
+      { text: '深入了解', type: 'child' },
+      { text: '实践应用', type: 'child' }
+    ];
+
+    structuredPoints = [
+      {
+        id: 'general_1',
+        title: '概述',
+        content: `${selectedNodeText}的总体概述和重要性`,
+        keywords: ['概述', '重要性', '总体']
+      },
+      {
+        id: 'general_2',
+        title: '关键点',
+        content: `关于${selectedNodeText}需要重点关注的方面`,
+        keywords: ['关键', '重点', '核心']
+      }
+    ];
+  }
+
+  return { content, suggestions, structuredPoints };
+}
+
+// 从AI回复中提取建议
+function extractSuggestions(content) {
+  const suggestions = [];
+  const lines = content.split('\n');
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+      const text = trimmed.substring(2).trim();
+      if (text.length > 0 && text.length < 50) {
+        suggestions.push({
+          text,
+          type: 'child'
+        });
+      }
+    }
+  });
+
+  return suggestions.slice(0, 3);
+}
+
+// 添加消息
+function addMessage(role, content, suggestions = [], structuredPoints = []) {
+  const messagesContainer = document.getElementById('chatMessages');
+
+  // 移除欢迎消息
+  const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+  if (welcomeMessage && messages.length === 0) {
+    welcomeMessage.remove();
+  }
+
+  const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `message-item ${role}`;
+  messageDiv.id = messageId;
+
+  const avatar = role === 'user' ? '👤' : '🤖';
+
+  // 普通建议HTML
+  let suggestionsHtml = '';
+  if (suggestions && suggestions.length > 0) {
+    const suggestionButtons = suggestions.map(s =>
+      `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${s.text}', '${s.type || 'child'}')">${s.text}</button>`
+    ).join('');
+
+    suggestionsHtml = `
+      <div class="suggestions">
+        <div class="suggestions-title">💡 AI建议</div>
+        <div class="suggestions-list">${suggestionButtons}</div>
+      </div>
+    `;
+  }
+
+  // 结构化分点HTML
+  let structuredPointsHtml = '';
+  if (structuredPoints && structuredPoints.length > 0) {
+    const pointsHtml = structuredPoints.map((point, index) => `
+      <div class="structured-point" data-point-id="${point.id || index}">
+        <div class="point-header">
+          <input type="checkbox" class="point-checkbox" id="point_${messageId}_${index}">
+          <label for="point_${messageId}_${index}" class="point-title">${point.title}</label>
+        </div>
+        <div class="point-content">${point.content}</div>
+        ${point.keywords ? `<div class="point-keywords">${point.keywords.map(k => `<span class="keyword">${k}</span>`).join('')}</div>` : ''}
+      </div>
+    `).join('');
+
+    structuredPointsHtml = `
+      <div class="structured-points">
+        <div class="points-header">
+          <div class="points-title">📋 结构化分点</div>
+          <div class="points-actions">
+            <button class="select-all-btn" onclick="selectAllPoints('${messageId}')">全选</button>
+            <button class="add-selected-btn" onclick="addSelectedPoints('${messageId}')">添加选中</button>
+          </div>
+        </div>
+        <div class="points-list">${pointsHtml}</div>
+      </div>
+    `;
+  }
+
+  messageDiv.innerHTML = `
+    <div class="message-avatar">${avatar}</div>
+    <div class="message-content">
+      <div class="message-text">${content}</div>
+      ${suggestionsHtml}
+      ${structuredPointsHtml}
+    </div>
+  `;
+
+  messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  messages.push({ role, content, suggestions, structuredPoints });
+}
+
+// 添加系统消息
+function addSystemMessage(content) {
+  const messagesContainer = document.getElementById('chatMessages');
+
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message-item system';
+  messageDiv.innerHTML = `
+    <div class="message-content">
+      ${content}
+    </div>
+  `;
+
+  messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 设置加载状态
+function setLoading(loading) {
+  isLoading = loading;
+  const sendBtn = document.getElementById('sendBtn');
+  const input = document.getElementById('messageInput');
+
+  if (loading) {
+    sendBtn.textContent = '发送中...';
+    sendBtn.disabled = true;
+    input.disabled = true;
+
+    // 添加加载消息
+    const messagesContainer = document.getElementById('chatMessages');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message-item assistant';
+    loadingDiv.id = 'loadingMessage';
+    loadingDiv.innerHTML = `
+      <div class="message-avatar loading">🤖</div>
+      <div class="message-content">
+        <div class="message-text">AI正在思考中...</div>
+      </div>
+    `;
+    messagesContainer.appendChild(loadingDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  } else {
+    sendBtn.textContent = '发送';
+    sendBtn.disabled = false;
+    input.disabled = false;
+
+    // 移除加载消息
+    const loadingMessage = document.getElementById('loadingMessage');
+    if (loadingMessage) {
+      loadingMessage.remove();
+    }
+  }
+}
+
+// 添加建议到思维导图
+function addSuggestionToMindMap(text, type = 'child') {
+  if (!mindMapInstance) {
+    showNotification('❌ 思维导图未初始化，请等待加载完成', 'error');
+    return;
+  }
+
+  try {
+    // 获取当前激活的节点
+    const activeNodes = mindMapInstance.renderer.activeNodeList;
+    if (!activeNodes || activeNodes.length === 0) {
+      showNotification('⚠️ 请先点击选择一个思维导图节点', 'warning');
+      return;
+    }
+
+    const parentNode = activeNodes[0];
+    console.log('添加节点到:', parentNode, '文本:', text, '类型:', type);
+
+    // 根据类型添加节点 - 使用正确的参数格式
+    if (type === 'child') {
+      // 添加子节点
+      mindMapInstance.execCommand('INSERT_CHILD_NODE', parentNode, {
+        data: {
+          text: text,
+          uid: generateNodeId()
+        }
+      });
+    } else if (type === 'sibling') {
+      // 添加兄弟节点
+      mindMapInstance.execCommand('INSERT_NODE', parentNode, {
+        data: {
+          text: text,
+          uid: generateNodeId()
+        }
+      });
+    }
+
+    showNotification(`✅ 已添加"${text}"到思维导图`, 'success');
+
+    // 触发数据保存
+    try {
+      if (typeof window.takeOverAppMethods?.saveMindMapData === 'function') {
+        const data = mindMapInstance.getData();
+        window.takeOverAppMethods.saveMindMapData(data);
+      }
+    } catch (saveError) {
+      console.warn('保存数据失败:', saveError);
+    }
+
+  } catch (error) {
+    console.error('添加节点失败:', error);
+    showNotification('❌ 添加节点失败: ' + error.message, 'error');
+  }
+}
+
+// 生成唯一节点ID
+function generateNodeId() {
+  return 'ai_node_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// 手动同步当前激活节点
+function syncCurrentActiveNode() {
+  if (!mindMapInstance) {
+    console.log('思维导图实例不存在，无法同步');
+    showNotification('❌ 思维导图未初始化', 'error');
+    return false;
+  }
+
+  try {
+    const activeNodes = mindMapInstance.renderer.activeNodeList;
+    if (activeNodes && activeNodes.length > 0) {
+      const currentActiveNode = activeNodes[0];
+      console.log('手动同步激活节点:', currentActiveNode);
+      updateSelectedNode(currentActiveNode);
+
+      // 获取节点文本用于通知
+      let rawNodeText = currentActiveNode.nodeData ?
+        currentActiveNode.nodeData.data.text :
+        (currentActiveNode.getData ? currentActiveNode.getData('text') : '未知节点');
+
+      // 清理HTML标签
+      let nodeText = '';
+      if (typeof rawNodeText === 'string') {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = rawNodeText;
+        nodeText = tempDiv.textContent || tempDiv.innerText || rawNodeText;
+      } else {
+        nodeText = rawNodeText || '未知节点';
+      }
+
+      showNotification(`✅ 已同步节点: ${nodeText}`, 'success');
+      return true;
+    } else {
+      console.log('没有激活的节点');
+      showNotification('⚠️ 没有选中的节点，请先点击思维导图中的节点', 'warning');
+      return false;
+    }
+  } catch (error) {
+    console.error('同步激活节点失败:', error);
+    showNotification('❌ 同步失败: ' + error.message, 'error');
+    return false;
+  }
+}
+
+// 批量添加结构化分点
+function addStructuredPoints(points) {
+  console.log('addStructuredPoints 被调用:', points);
+
+  if (!points || points.length === 0) {
+    showNotification('❌ 无效的参数：没有分点数据', 'error');
+    return;
+  }
+
+  if (!mindMapInstance) {
+    showNotification('❌ 思维导图未初始化，请等待加载完成', 'error');
+    return;
+  }
+
+  // 尝试手动同步当前激活节点
+  syncCurrentActiveNode();
+
+  try {
+    const activeNodes = mindMapInstance.renderer.activeNodeList;
+    if (!activeNodes || activeNodes.length === 0) {
+      showNotification('⚠️ 请先点击选择一个思维导图节点', 'warning');
+      return;
+    }
+
+    const parentNode = activeNodes[0];
+    let addedCount = 0;
+
+    console.log('批量添加分点:', points, '到节点:', parentNode);
+
+    // 参考ai-mind-map的实现，使用正确的参数格式
+    points.forEach((point, index) => {
+      try {
+        // 使用标题作为节点文本
+        const nodeText = point.title || point.text || `分点${index + 1}`;
+
+        // 使用正确的命令格式
+        mindMapInstance.execCommand('INSERT_CHILD_NODE', parentNode, {
+          data: {
+            text: nodeText,
+            note: point.content || '', // 将详细内容作为备注
+            uid: `ai_point_${Date.now()}_${index}`
+          }
+        });
+        addedCount++;
+
+        console.log(`成功添加分点: ${nodeText}`);
+      } catch (error) {
+        console.error('添加分点失败:', point, error);
+      }
+    });
+
+    if (addedCount > 0) {
+      showNotification(`✅ 已添加 ${addedCount} 个分点到思维导图`, 'success');
+
+      // 触发数据保存
+      try {
+        if (typeof window.takeOverAppMethods?.saveMindMapData === 'function') {
+          const data = mindMapInstance.getData();
+          window.takeOverAppMethods.saveMindMapData(data);
+        }
+      } catch (saveError) {
+        console.warn('保存数据失败:', saveError);
+      }
+    } else {
+      showNotification('❌ 没有成功添加任何分点', 'error');
+    }
+
+  } catch (error) {
+    console.error('批量添加节点失败:', error);
+    showNotification('❌ 批量添加失败: ' + error.message, 'error');
+  }
+}
+
+// 切换最小化状态
+function toggleMinimize() {
+  isMinimized = !isMinimized;
+  const chatBot = document.getElementById('aiChatBot');
+  const minimizeBtn = document.getElementById('minimizeBtn');
+
+  if (isMinimized) {
+    chatBot.classList.add('minimized');
+    minimizeBtn.textContent = '⬆️';
+    minimizeBtn.title = '展开';
+  } else {
+    chatBot.classList.remove('minimized');
+    minimizeBtn.textContent = '⬇️';
+    minimizeBtn.title = '最小化';
+  }
+}
+
+// 清除消息
+function clearMessages() {
+  const messagesContainer = document.getElementById('chatMessages');
+  messagesContainer.innerHTML = `
+    <div class="welcome-message">
+      <div class="welcome-content">
+        <span class="ai-icon">🤖</span>
+        <h3>AI思维导图助手</h3>
+        <p>点击思维导图节点开始对话</p>
+      </div>
+    </div>
+  `;
+  messages = [];
+}
+
+// 显示配置
+function showConfig() {
+  document.getElementById('aiConfigPanel').style.display = 'block';
+
+  // 加载当前配置到表单
+  document.getElementById('aiProvider').value = aiConfig.provider;
+  document.getElementById('apiKey').value = aiConfig.apiKey;
+  document.getElementById('aiModel').value = aiConfig.model;
+  document.getElementById('baseURL').value = aiConfig.baseURL;
+}
+
+// 关闭配置
+function closeConfig() {
+  document.getElementById('aiConfigPanel').style.display = 'none';
+}
+
+// 保存配置
+function saveConfig() {
+  aiConfig.provider = document.getElementById('aiProvider').value;
+  aiConfig.apiKey = document.getElementById('apiKey').value;
+  aiConfig.model = document.getElementById('aiModel').value;
+  aiConfig.baseURL = document.getElementById('baseURL').value;
+
+  // 保存到本地存储
+  localStorage.setItem('ai_config', JSON.stringify(aiConfig));
+
+  alert('配置保存成功');
+  closeConfig();
+}
+
+// 加载AI配置
+function loadAIConfig() {
+  try {
+    const saved = localStorage.getItem('ai_config');
+    if (saved) {
+      aiConfig = { ...aiConfig, ...JSON.parse(saved) };
+    }
+  } catch (error) {
+    console.error('加载AI配置失败:', error);
+  }
+}
+
+// 测试连接
+async function testConnection() {
+  if (!aiConfig.apiKey) {
+    alert('请先配置API Key');
+    return;
+  }
+
+  try {
+    const response = await callRealAI('测试连接');
+    alert('连接测试成功');
+  } catch (error) {
+    alert('连接测试失败：' + error.message);
+  }
+}
+
+// 处理键盘事件
+function handleKeyDown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
+// 结构化分点相关函数
+function selectAllPoints(messageId) {
+  const checkboxes = document.querySelectorAll(`#${messageId} .point-checkbox`);
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = !allChecked;
+  });
+
+  // 更新按钮文本
+  const selectAllBtn = document.querySelector(`#${messageId} .select-all-btn`);
+  if (selectAllBtn) {
+    selectAllBtn.textContent = allChecked ? '全选' : '取消全选';
+  }
+}
+
+function addSelectedPoints(messageId) {
+  const checkboxes = document.querySelectorAll(`#${messageId} .point-checkbox:checked`);
+  if (checkboxes.length === 0) {
+    showNotification('请先选择要添加的分点', 'warning');
+    return;
+  }
+
+  const selectedPoints = [];
+  checkboxes.forEach(checkbox => {
+    const pointDiv = checkbox.closest('.structured-point');
+    const title = pointDiv.querySelector('.point-title').textContent;
+    const content = pointDiv.querySelector('.point-content').textContent;
+    const keywords = Array.from(pointDiv.querySelectorAll('.keyword')).map(k => k.textContent);
+
+    selectedPoints.push({
+      title,
+      content,
+      keywords
+    });
+  });
+
+  addStructuredPoints(selectedPoints);
+}
+
+// 通知系统
+function showNotification(message, type = 'info') {
+  // 创建通知元素
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+
+  // 添加样式
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    z-index: 10002;
+    max-width: 300px;
+    word-wrap: break-word;
+    animation: slideInRight 0.3s ease;
+  `;
+
+  // 根据类型设置颜色
+  switch (type) {
+    case 'success':
+      notification.style.backgroundColor = '#67c23a';
+      break;
+    case 'error':
+      notification.style.backgroundColor = '#f56c6c';
+      break;
+    case 'warning':
+      notification.style.backgroundColor = '#e6a23c';
+      break;
+    default:
+      notification.style.backgroundColor = '#409eff';
+  }
+
+  document.body.appendChild(notification);
+
+  // 3秒后自动移除
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.style.animation = 'slideOutRight 0.3s ease';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }
+  }, 3000);
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+  // 延迟初始化，确保Vue应用已加载
+  setTimeout(initAIChat, 1000);
+});
+</script>
+
+<script>const getDataFromBackend = () => {
         return new Promise((resolve, reject) => {
           setTimeout(() => {
             resolve({

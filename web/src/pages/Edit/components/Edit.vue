@@ -52,6 +52,12 @@
     <NodeNoteSidebar v-if="mindMap" :mindMap="mindMap"></NodeNoteSidebar>
     <AiCreate v-if="mindMap && enableAi" :mindMap="mindMap"></AiCreate>
     <AiChat v-if="enableAi"></AiChat>
+    <!-- 简化版AI聊天浮窗 -->
+    <SimpleAiChat
+      v-if="enableAi"
+      :selectedNodeText="selectedNodeText"
+      @add-suggestion="handleAddSuggestion"
+    ></SimpleAiChat>
     <div
       class="dragMask"
       v-if="showDragMask"
@@ -126,6 +132,7 @@ import NodeImgPlacementToolbar from './NodeImgPlacementToolbar.vue'
 import NodeNoteSidebar from './NodeNoteSidebar.vue'
 import AiCreate from './AiCreate.vue'
 import AiChat from './AiChat.vue'
+import SimpleAiChat from './SimpleAiChat.vue'
 
 // 注册插件
 MindMap.usePlugin(MiniMap)
@@ -185,7 +192,8 @@ export default {
     NodeImgPlacementToolbar,
     NodeNoteSidebar,
     AiCreate,
-    AiChat
+    AiChat,
+    SimpleAiChat
   },
   data() {
     return {
@@ -195,7 +203,8 @@ export default {
       mindMapConfig: {},
       prevImg: '',
       storeConfigTimer: null,
-      showDragMask: false
+      showDragMask: false,
+      selectedNodeText: '' // 当前选中的节点文本
     }
   },
   computed: {
@@ -484,6 +493,8 @@ export default {
         })
       })
       this.bindSaveEvent()
+      // 绑定AI相关事件
+      this.bindAIEvents()
       // 如果应用被接管，那么抛出事件传递思维导图实例
       if (window.takeOverApp) {
         this.$bus.$emit('app_inited', this.mindMap)
@@ -689,6 +700,77 @@ export default {
         showCancelButton: false,
         showConfirmButton: false
       })
+    },
+
+    // 绑定AI相关事件
+    bindAIEvents() {
+      // 监听节点点击事件，更新选中节点信息
+      this.mindMap.on('node_click', (node) => {
+        this.updateSelectedNodeText(node)
+      })
+
+      // 监听节点激活事件
+      this.mindMap.on('node_active', (node, activeNodeList) => {
+        if (activeNodeList && activeNodeList.length > 0) {
+          this.updateSelectedNodeText(activeNodeList[0])
+        } else {
+          this.selectedNodeText = ''
+        }
+      })
+    },
+
+    // 更新选中节点文本
+    updateSelectedNodeText(node) {
+      if (!node) {
+        this.selectedNodeText = ''
+        return
+      }
+
+      try {
+        this.selectedNodeText = node.getData('text') || ''
+      } catch (error) {
+        console.error('获取节点文本失败:', error)
+        this.selectedNodeText = ''
+      }
+    },
+
+    // 处理AI建议添加
+    handleAddSuggestion({ text, type = 'child' }) {
+      if (!this.mindMap || !text) {
+        console.error('添加建议失败：缺少必要参数')
+        return
+      }
+
+      try {
+        // 获取当前激活的节点
+        const activeNodes = this.mindMap.renderer.activeNodeList
+        if (!activeNodes || activeNodes.length === 0) {
+          alert('请先选择一个节点')
+          return
+        }
+
+        const parentNode = activeNodes[0]
+
+        // 根据类型添加节点
+        if (type === 'child') {
+          // 添加子节点
+          this.mindMap.execCommand('INSERT_CHILD_NODE', parentNode, {
+            text: text
+          })
+        } else if (type === 'sibling') {
+          // 添加兄弟节点
+          this.mindMap.execCommand('INSERT_NODE', parentNode, {
+            text: text
+          })
+        }
+
+        // 保存数据
+        this.manualSave()
+
+      } catch (error) {
+        console.error('添加建议失败:', error)
+        alert('添加节点失败')
+      }
     }
   }
 }
