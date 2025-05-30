@@ -1524,6 +1524,20 @@ async function callRealAI(message) {
   console.log('📋 结构化分点:', structuredPoints);
   console.log('===============');
 
+  // 清理显示内容中的JSON部分
+  if (contentElement) {
+    const cleanedContent = cleanResponseContent(contentElement.textContent || '');
+    if (cleanedContent !== (contentElement.textContent || '')) {
+      // 如果是推理模型且有最终回答，显示最终回答部分
+      if (isReasoningModel && finalAnswer) {
+        const cleanedFinalAnswer = cleanResponseContent(finalAnswer);
+        contentElement.innerHTML = `<div class="final-answer">${cleanedFinalAnswer}</div>`;
+      } else {
+        contentElement.textContent = cleanedContent;
+      }
+    }
+  }
+
   // 为流式消息添加建议和结构化分点
   if (suggestions.length > 0 || structuredPoints.length > 0) {
     const streamingMessage = document.getElementById(messageId);
