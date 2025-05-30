@@ -697,6 +697,33 @@ function initAIChat() {
   // 显示AI聊天浮窗
   document.getElementById('aiChatBot').style.display = 'flex';
 
+  // 设置调试模式（可以通过URL参数或localStorage控制）
+  const urlParams = new URLSearchParams(window.location.search);
+  window.debugMode = urlParams.get('debug') === 'true' || localStorage.getItem('ai_debug_mode') === 'true';
+
+  if (window.debugMode) {
+    console.log('🐛 AI调试模式已启用');
+    console.log('💡 提示：在浏览器地址栏添加 ?debug=false 可关闭调试模式');
+    console.log('💡 或者在控制台输入 toggleDebugMode() 来切换调试模式');
+  }
+
+  // 提供全局函数来切换调试模式
+  window.toggleDebugMode = function(enable) {
+    if (typeof enable === 'boolean') {
+      window.debugMode = enable;
+    } else {
+      window.debugMode = !window.debugMode;
+    }
+
+    localStorage.setItem('ai_debug_mode', window.debugMode.toString());
+
+    if (window.debugMode) {
+      console.log('🐛 AI调试模式已启用');
+    } else {
+      console.log('🔇 AI调试模式已关闭');
+    }
+  };
+
   // 加载AI配置
   loadAIConfig();
 
@@ -874,13 +901,26 @@ function bindMindMapEvents(mindMap) {
         const activeNodes = mindMap.renderer.activeNodeList;
         if (activeNodes.length > 0) {
           const currentActiveNode = activeNodes[0];
-          const currentText = currentActiveNode.nodeData ?
+          let currentRawText = currentActiveNode.nodeData ?
             currentActiveNode.nodeData.data.text :
             (currentActiveNode.getData ? currentActiveNode.getData('text') : '');
 
+          // 清理HTML标签，获取纯文本用于比较
+          let currentCleanText = '';
+          if (typeof currentRawText === 'string') {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = currentRawText;
+            currentCleanText = tempDiv.textContent || tempDiv.innerText || currentRawText;
+          } else {
+            currentCleanText = currentRawText || '';
+          }
+
           // 如果当前激活节点与记录的不同，更新选中节点
-          if (currentText && currentText !== selectedNodeText) {
-            console.log('检测到新的激活节点:', currentText);
+          if (currentCleanText && currentCleanText !== selectedNodeText) {
+            // 只在调试模式下输出详细信息
+            if (window.debugMode) {
+              console.log('检测到新的激活节点:', currentRawText, '-> 清理后:', currentCleanText);
+            }
             updateSelectedNode(currentActiveNode);
           }
         }
@@ -921,12 +961,15 @@ function updateSelectedNode(node) {
     updateContextInfo();
     showQuickActions();
 
-    console.log('节点选择成功:', {
-      text: selectedNodeText,
-      hierarchy: selectedNodeHierarchy,
-      node: node,
-      nodeData: node.nodeData
-    });
+    // 只在调试模式下输出详细信息
+    if (window.debugMode) {
+      console.log('节点选择成功:', {
+        text: selectedNodeText,
+        hierarchy: selectedNodeHierarchy,
+        node: node,
+        nodeData: node.nodeData
+      });
+    }
   } catch (error) {
     console.error('获取节点信息失败:', error);
     selectedNodeText = '';
@@ -971,6 +1014,55 @@ function getNodeHierarchy(node) {
   }
 
   return hierarchy;
+}
+
+// 获取节点链路的详细信息（包括备注）
+function getNodeHierarchyWithNotes(node) {
+  const hierarchyWithNotes = [];
+  let currentNode = node;
+
+  while (currentNode) {
+    try {
+      // 获取节点文本
+      let rawText = '';
+      if (currentNode.nodeData && currentNode.nodeData.data) {
+        rawText = currentNode.nodeData.data.text || '';
+      } else if (currentNode.getData) {
+        rawText = currentNode.getData('text') || '';
+      }
+
+      // 清理HTML标签，只保留纯文本
+      let text = '';
+      if (typeof rawText === 'string') {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = rawText;
+        text = tempDiv.textContent || tempDiv.innerText || rawText;
+      } else {
+        text = rawText || '';
+      }
+
+      // 获取节点备注
+      let note = '';
+      if (currentNode.nodeData && currentNode.nodeData.data) {
+        note = currentNode.nodeData.data.note || '';
+      } else if (currentNode.getData) {
+        note = currentNode.getData('note') || '';
+      }
+
+      if (text) {
+        hierarchyWithNotes.unshift({
+          text: text,
+          note: note
+        });
+      }
+      currentNode = currentNode.parent;
+    } catch (error) {
+      console.error('获取父节点详细信息失败:', error);
+      break;
+    }
+  }
+
+  return hierarchyWithNotes;
 }
 
 // 更新上下文信息
@@ -1039,7 +1131,10 @@ function updateSelectedNodeDisplay() {
     `;
 
     nodeDisplay.style.display = 'block';
-    console.log('选中节点显示区域已更新:', selectedNodeText, selectedNodeHierarchy);
+    // 只在调试模式下输出
+    if (window.debugMode) {
+      console.log('选中节点显示区域已更新:', selectedNodeText, selectedNodeHierarchy);
+    }
   } else {
     nodeDisplay.style.display = 'none';
   }
@@ -1136,31 +1231,75 @@ async function callRealAI(message) {
     }
   ];
 
+  // 打印请求的prompt到控制台
+  console.log('=== LLM API 请求 ===');
+  console.log('🔧 配置信息:', { provider, model, baseURL: baseURL.replace(/\/+$/, '') });
+  console.log('📝 完整请求消息:', JSON.stringify(messages, null, 2));
+  console.log('💬 用户消息:', message);
+  console.log('🤖 系统提示词:', systemPrompt);
+
+  // 打印节点链路的详细信息
+  if (mindMapInstance && mindMapInstance.renderer && mindMapInstance.renderer.activeNodeList && mindMapInstance.renderer.activeNodeList.length > 0) {
+    const currentActiveNode = mindMapInstance.renderer.activeNodeList[0];
+    const hierarchyWithNotes = getNodeHierarchyWithNotes(currentActiveNode);
+
+    if (hierarchyWithNotes.length > 0) {
+      console.log('🔗 节点链路详细信息:');
+      hierarchyWithNotes.forEach((nodeInfo, index) => {
+        console.log(`  ${index + 1}. 节点: "${nodeInfo.text}"`);
+        if (nodeInfo.note && nodeInfo.note.trim()) {
+          console.log(`     备注: ${nodeInfo.note.trim()}`);
+        }
+      });
+    }
+  }
+
+  console.log('==================');
+
+  const requestBody = {
+    model,
+    messages,
+    max_tokens: 2000,
+    temperature: 0.7
+  };
+
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 2000,
-      temperature: 0.7
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
+    console.error('❌ API请求失败:', response.status, response.statusText);
     throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
   const rawContent = data.choices[0].message.content;
 
+  // 打印原始响应到控制台
+  console.log('=== LLM API 响应 ===');
+  console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
+  console.log('💭 原始回答内容:', rawContent);
+  if (data.usage) {
+    console.log('📈 Token使用情况:', data.usage);
+  }
+  console.log('==================');
+
   // 解析回复内容
   const content = cleanResponseContent(rawContent);
   const suggestions = extractSuggestions(rawContent);
   const structuredPoints = parseStructuredPoints(rawContent);
+
+  // 打印解析后的结果
+  console.log('=== 解析结果 ===');
+  console.log('📄 清理后内容:', content);
+  console.log('💡 提取的建议:', suggestions);
+  console.log('📋 结构化分点:', structuredPoints);
+  console.log('===============');
 
   return { content, suggestions, structuredPoints };
 }
@@ -1194,13 +1333,37 @@ ${jsonExample}
 - 可以作为思维导图的节点添加
 - 具有实际价值，帮助用户扩展思维导图`;
 
+  // 获取当前选中节点的详细上下文信息
   if (selectedNodeText && selectedNodeHierarchy.length > 0) {
     prompt += `
 
 当前上下文：
 - 选中节点：${selectedNodeText}
-- 节点路径：${selectedNodeHierarchy.join(' > ')}
-- 请基于这个节点的上下文来回答用户的问题，并提供相关的扩展建议`;
+- 节点路径：${selectedNodeHierarchy.join(' > ')}`;
+
+    // 获取节点链路的详细信息（包括备注）
+    if (mindMapInstance && mindMapInstance.renderer && mindMapInstance.renderer.activeNodeList && mindMapInstance.renderer.activeNodeList.length > 0) {
+      const currentActiveNode = mindMapInstance.renderer.activeNodeList[0];
+      const hierarchyWithNotes = getNodeHierarchyWithNotes(currentActiveNode);
+
+      if (hierarchyWithNotes.length > 0) {
+        prompt += `
+
+节点链路详细信息：`;
+        hierarchyWithNotes.forEach((nodeInfo, index) => {
+          prompt += `
+${index + 1}. 节点："${nodeInfo.text}"`;
+          if (nodeInfo.note && nodeInfo.note.trim()) {
+            prompt += `
+   备注：${nodeInfo.note.trim()}`;
+          }
+        });
+      }
+    }
+
+    prompt += `
+
+- 请基于这个节点的上下文和链路信息来回答用户的问题，并提供相关的扩展建议`;
   }
 
   return prompt;

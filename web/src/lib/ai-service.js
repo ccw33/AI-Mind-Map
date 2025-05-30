@@ -48,8 +48,21 @@ export class AIService {
     let systemPrompt = '你是一个专业的思维导图助手，帮助用户扩展和完善思维导图内容。'
 
     if (context && context.selectedNode) {
-      const { text, hierarchy } = context.selectedNode
-      systemPrompt += `\n\n当前用户选中的节点是："${text}"，位于思维导图的层级：${hierarchy.join(' > ')}。请基于这个节点的上下文来回答用户的问题。`
+      const { text, hierarchy, hierarchyWithNotes } = context.selectedNode
+      systemPrompt += `\n\n当前用户选中的节点是："${text}"，位于思维导图的层级：${hierarchy.join(' > ')}。`
+
+      // 添加节点链路的详细信息（包括备注）
+      if (hierarchyWithNotes && hierarchyWithNotes.length > 0) {
+        systemPrompt += `\n\n节点链路详细信息：`
+        hierarchyWithNotes.forEach((nodeInfo, index) => {
+          systemPrompt += `\n${index + 1}. 节点："${nodeInfo.text}"`
+          if (nodeInfo.note && nodeInfo.note.trim()) {
+            systemPrompt += `\n   备注：${nodeInfo.note.trim()}`
+          }
+        })
+      }
+
+      systemPrompt += `\n\n请基于这个节点的上下文和链路信息来回答用户的问题。`
     }
 
     messages.push({
@@ -91,7 +104,23 @@ export class AIService {
 
   // 调用OpenAI兼容的API（包括OpenAI、DeepSeek等）
   async callOpenAICompatibleAPI(messages) {
-    const { apiKey, baseURL, model, timeout } = this.config
+    const { apiKey, baseURL, model } = this.config
+
+    // 打印请求的prompt到控制台
+    console.log('=== LLM API 请求 (Vue版本) ===');
+    console.log('🔧 配置信息:', { provider: this.config.provider, model, baseURL: baseURL.replace(/\/+$/, '') });
+    console.log('📝 完整请求消息:', JSON.stringify(messages, null, 2));
+    console.log('🤖 系统提示词:', messages.find(m => m.role === 'system')?.content || '无');
+    console.log('💬 用户消息:', messages.find(m => m.role === 'user')?.content || '无');
+    console.log('==================');
+
+    const requestBody = {
+      model,
+      messages,
+      max_tokens: this.mindMapConfig.maxResponseLength,
+      temperature: 0.7,
+      stream: false
+    }
 
     const response = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
@@ -99,17 +128,11 @@ export class AIService {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: this.mindMapConfig.maxResponseLength,
-        temperature: 0.7,
-        stream: false
-      }),
-      // signal: AbortSignal.timeout(timeout) // 暂时注释掉，兼容性问题
+      body: JSON.stringify(requestBody)
     })
 
     if (!response.ok) {
+      console.error('❌ API请求失败:', response.status, response.statusText);
       throw new Error(`API请求失败: ${response.status} ${response.statusText}`)
     }
 
@@ -121,6 +144,16 @@ export class AIService {
 
     const content = data.choices[0].message.content
     const suggestions = this.extractSuggestions(content)
+
+    // 打印原始响应到控制台
+    console.log('=== LLM API 响应 (Vue版本) ===');
+    console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
+    console.log('💭 原始回答内容:', content);
+    if (data.usage) {
+      console.log('📈 Token使用情况:', data.usage);
+    }
+    console.log('💡 提取的建议:', suggestions);
+    console.log('==================');
 
     return {
       content,
@@ -137,28 +170,45 @@ export class AIService {
 
   // 调用Ollama API
   async callOllamaAPI(messages) {
-    const { baseURL, model, timeout } = this.config
+    const { baseURL, model } = this.config
+
+    // 打印请求的prompt到控制台
+    console.log('=== Ollama API 请求 (Vue版本) ===');
+    console.log('🔧 配置信息:', { provider: this.config.provider, model, baseURL: baseURL.replace(/\/+$/, '') });
+    console.log('📝 完整请求消息:', JSON.stringify(messages, null, 2));
+    console.log('🤖 系统提示词:', messages.find(m => m.role === 'system')?.content || '无');
+    console.log('💬 用户消息:', messages.find(m => m.role === 'user')?.content || '无');
+    console.log('==================');
+
+    const requestBody = {
+      model,
+      messages,
+      stream: false
+    }
 
     const response = await fetch(`${baseURL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false
-      }),
-      // signal: AbortSignal.timeout(timeout) // 暂时注释掉，兼容性问题
+      body: JSON.stringify(requestBody)
     })
 
     if (!response.ok) {
+      console.error('❌ Ollama API请求失败:', response.status, response.statusText);
       throw new Error(`Ollama API请求失败: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
     const content = data.message.content
     const suggestions = this.extractSuggestions(content)
+
+    // 打印原始响应到控制台
+    console.log('=== Ollama API 响应 (Vue版本) ===');
+    console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
+    console.log('💭 原始回答内容:', content);
+    console.log('💡 提取的建议:', suggestions);
+    console.log('==================');
 
     return {
       content,
