@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>推理模型测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .reasoning {
+            color: #666;
+            font-style: italic;
+        }
+        .final-answer {
+            color: #333;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 推理模型测试页面</h1>
+        <p>这个页面用于测试推理过程检测功能。打开浏览器控制台查看详细日志。</p>
+
+        <div class="test-section">
+            <div class="test-title">测试1: 模拟deepseek-reasoner官方格式响应</div>
+            <button onclick="testDeepSeekReasonerOfficial()">测试 DeepSeek Reasoner 官方格式</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试2: 模拟deepseek-reasoner旧格式响应</div>
+            <button onclick="testDeepSeekReasonerLegacy()">测试 DeepSeek Reasoner 旧格式</button>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试3: 模拟带thinking标签的响应</div>
+            <button onclick="testThinkingTags()">测试 Thinking 标签</button>
+            <div id="result3" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试4: 模拟中文推理格式</div>
+            <button onclick="testChineseReasoning()">测试中文推理</button>
+            <div id="result4" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试5: 模拟普通模型响应</div>
+            <button onclick="testNormalModel()">测试普通模型</button>
+            <div id="result5" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // 复制推理过程检测函数
+        function extractReasoningProcess(data, rawContent) {
+            const result = {
+                isReasoningModel: false,
+                reasoning: null,
+                finalAnswer: null
+            };
+
+            // 检测方法1: 检查模型名称是否包含推理相关关键词
+            const modelName = (data.model || '').toLowerCase();
+            const reasoningKeywords = ['reasoner', 'reasoning', 'think', 'cot', 'chain-of-thought'];
+            const isReasoningByModel = reasoningKeywords.some(keyword => modelName.includes(keyword));
+
+            // 检测方法2: 检查响应结构是否包含推理字段（DeepSeek官方格式）
+            const choice = data.choices && data.choices[0];
+            const hasDeepSeekReasoningField = choice && choice.message && choice.message.reasoning_content;
+
+            // 检测方法3: 检查响应结构是否包含其他推理字段（兼容其他格式）
+            const hasOtherReasoningField = choice && (choice.reasoning || choice.message?.reasoning);
+
+            // 检测方法3: 检查内容格式是否符合推理模式
+            const hasReasoningPattern = rawContent && (
+                rawContent.includes('<thinking>') ||
+                rawContent.includes('<reasoning>') ||
+                rawContent.includes('让我思考一下') ||
+                rawContent.includes('思考过程：') ||
+                rawContent.includes('推理过程：') ||
+                /^[\s\S]*?(?:思考|推理|分析)[\s\S]*?(?:结论|答案|回答)[\s\S]*$/i.test(rawContent)
+            );
+
+            result.isReasoningModel = isReasoningByModel || hasDeepSeekReasoningField || hasOtherReasoningField || hasReasoningPattern;
+
+            if (result.isReasoningModel) {
+                // 提取推理过程
+                if (choice && choice.message && choice.message.reasoning_content) {
+                    // 方法1: DeepSeek官方格式 - 从message.reasoning_content字段提取
+                    result.reasoning = choice.message.reasoning_content;
+                    result.finalAnswer = rawContent; // rawContent就是content字段的内容
+                } else if (choice && choice.reasoning) {
+                    // 方法2: 从API响应的reasoning字段提取（其他格式）
+                    result.reasoning = choice.reasoning;
+                    result.finalAnswer = rawContent;
+                } else if (choice && choice.message && choice.message.reasoning) {
+                    // 方法3: 从message.reasoning字段提取（其他格式）
+                    result.reasoning = choice.message.reasoning;
+                    result.finalAnswer = rawContent;
+                } else if (rawContent) {
+                    // 方法3: 从内容中解析推理过程
+                    const reasoningPatterns = [
+                        // <thinking>标签格式
+                        /<thinking>([\s\S]*?)<\/thinking>/i,
+                        /<reasoning>([\s\S]*?)<\/reasoning>/i,
+                        // 中文格式
+                        /(?:思考过程：|推理过程：|让我思考一下[：:]?)([\s\S]*?)(?:结论：|答案：|回答：|最终答案：)/i,
+                        // 分段格式
+                        /^([\s\S]*?)(?:\n\n|^)(?:结论|答案|回答|最终答案)[：:]?([\s\S]*)$/i
+                    ];
+
+                    for (const pattern of reasoningPatterns) {
+                        const match = rawContent.match(pattern);
+                        if (match) {
+                            if (pattern.source.includes('thinking') || pattern.source.includes('reasoning')) {
+                                result.reasoning = match[1].trim();
+                                result.finalAnswer = rawContent.replace(match[0], '').trim();
+                            } else if (pattern.source.includes('思考过程') || pattern.source.includes('推理过程')) {
+                                result.reasoning = match[1].trim();
+                                const finalMatch = rawContent.match(/(?:结论：|答案：|回答：|最终答案：)([\s\S]*)$/i);
+                                result.finalAnswer = finalMatch ? finalMatch[1].trim() : rawContent;
+                            } else {
+                                result.reasoning = match[1].trim();
+                                result.finalAnswer = match[2] ? match[2].trim() : rawContent;
+                            }
+                            break;
+                        }
+                    }
+
+                    // 如果没有找到明确的分隔，但检测到是推理模型，尝试智能分割
+                    if (!result.reasoning && result.isReasoningModel) {
+                        const lines = rawContent.split('\n');
+                        const thinkingLines = [];
+                        const answerLines = [];
+                        let isInAnswer = false;
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.match(/^(?:结论|答案|回答|最终答案|总结)[：:]?/i)) {
+                                isInAnswer = true;
+                            }
+
+                            if (isInAnswer) {
+                                answerLines.push(line);
+                            } else {
+                                thinkingLines.push(line);
+                            }
+                        }
+
+                        if (thinkingLines.length > 0 && answerLines.length > 0) {
+                            result.reasoning = thinkingLines.join('\n').trim();
+                            result.finalAnswer = answerLines.join('\n').trim();
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        function testDeepSeekReasonerOfficial() {
+            // 根据DeepSeek官方文档的格式
+            const mockData = {
+                model: "deepseek-reasoner",
+                choices: [{
+                    message: {
+                        reasoning_content: "用户询问关于思维导图的问题。我需要分析当前选中的节点，并提供相关的扩展建议。首先，我要理解节点的上下文，然后基于这个上下文提供有价值的建议。让我思考一下最佳的回答方式...",
+                        content: "基于您选中的节点，我为您提供以下扩展建议：\n\n1. 核心概念\n2. 应用场景\n3. 相关技术"
+                    }
+                }]
+            };
+
+            const rawContent = mockData.choices[0].message.content;
+            const result = extractReasoningProcess(mockData, rawContent);
+
+            console.log('=== DeepSeek Reasoner 官方格式测试 ===');
+            console.log('🧠 推理模型检测:', result.isReasoningModel ? '是' : '否');
+            if (result.reasoning) {
+                console.log('🤔 推理过程:');
+                console.log('%c' + result.reasoning, 'color: #888; font-style: italic;');
+            }
+            if (result.finalAnswer) {
+                console.log('✅ 最终回答:', result.finalAnswer);
+            }
+            console.log('==================');
+
+            document.getElementById('result1').innerHTML =
+                `检测结果: ${result.isReasoningModel ? '✅ 推理模型' : '❌ 普通模型'}\n` +
+                `推理过程: ${result.reasoning ? '✅ 已提取' : '❌ 未找到'}\n` +
+                `最终回答: ${result.finalAnswer ? '✅ 已提取' : '❌ 未找到'}`;
+        }
+
+        function testDeepSeekReasonerLegacy() {
+            // 旧格式（兼容性测试）
+            const mockData = {
+                model: "deepseek-reasoner",
+                choices: [{
+                    reasoning: "用户询问关于思维导图的问题。我需要分析当前选中的节点，并提供相关的扩展建议。首先，我要理解节点的上下文，然后基于这个上下文提供有价值的建议。",
+                    message: {
+                        content: "基于您选中的节点，我为您提供以下扩展建议：\n\n1. 核心概念\n2. 应用场景\n3. 相关技术"
+                    }
+                }]
+            };
+
+            const rawContent = mockData.choices[0].message.content;
+            const result = extractReasoningProcess(mockData, rawContent);
+
+            console.log('=== DeepSeek Reasoner 旧格式测试 ===');
+            console.log('🧠 推理模型检测:', result.isReasoningModel ? '是' : '否');
+            if (result.reasoning) {
+                console.log('🤔 推理过程:');
+                console.log('%c' + result.reasoning, 'color: #888; font-style: italic;');
+            }
+            if (result.finalAnswer) {
+                console.log('✅ 最终回答:', result.finalAnswer);
+            }
+            console.log('==================');
+
+            document.getElementById('result2').innerHTML =
+                `检测结果: ${result.isReasoningModel ? '✅ 推理模型' : '❌ 普通模型'}\n` +
+                `推理过程: ${result.reasoning ? '✅ 已提取' : '❌ 未找到'}\n` +
+                `最终回答: ${result.finalAnswer ? '✅ 已提取' : '❌ 未找到'}`;
+        }
+
+        function testThinkingTags() {
+            const mockData = {
+                model: "gpt-4",
+                choices: [{
+                    message: {
+                        content: "<thinking>\n这是一个关于思维导图的问题。我需要仔细分析用户的需求，然后提供合适的建议。让我思考一下最佳的回答方式。\n</thinking>\n\n根据您的问题，我建议从以下几个方面来扩展思维导图：\n\n1. 主要概念\n2. 实际应用\n3. 相关工具"
+                    }
+                }]
+            };
+
+            const rawContent = mockData.choices[0].message.content;
+            const result = extractReasoningProcess(mockData, rawContent);
+
+            console.log('=== Thinking 标签测试 ===');
+            console.log('🧠 推理模型检测:', result.isReasoningModel ? '是' : '否');
+            if (result.reasoning) {
+                console.log('🤔 推理过程:');
+                console.log('%c' + result.reasoning, 'color: #888; font-style: italic;');
+            }
+            if (result.finalAnswer) {
+                console.log('✅ 最终回答:', result.finalAnswer);
+            }
+            console.log('==================');
+
+            document.getElementById('result3').innerHTML =
+                `检测结果: ${result.isReasoningModel ? '✅ 推理模型' : '❌ 普通模型'}\n` +
+                `推理过程: ${result.reasoning ? '✅ 已提取' : '❌ 未找到'}\n` +
+                `最终回答: ${result.finalAnswer ? '✅ 已提取' : '❌ 未找到'}`;
+        }
+
+        function testChineseReasoning() {
+            const mockData = {
+                model: "qwen-plus",
+                choices: [{
+                    message: {
+                        content: "思考过程：用户选择了一个思维导图节点，想要获得扩展建议。我需要分析这个节点的上下文，理解它在整个思维导图中的位置和作用，然后提供有针对性的建议。\n\n结论：基于您选中的节点，我推荐以下扩展方向：\n\n1. 理论基础\n2. 实践方法\n3. 案例分析"
+                    }
+                }]
+            };
+
+            const rawContent = mockData.choices[0].message.content;
+            const result = extractReasoningProcess(mockData, rawContent);
+
+            console.log('=== 中文推理格式测试 ===');
+            console.log('🧠 推理模型检测:', result.isReasoningModel ? '是' : '否');
+            if (result.reasoning) {
+                console.log('🤔 推理过程:');
+                console.log('%c' + result.reasoning, 'color: #888; font-style: italic;');
+            }
+            if (result.finalAnswer) {
+                console.log('✅ 最终回答:', result.finalAnswer);
+            }
+            console.log('==================');
+
+            document.getElementById('result4').innerHTML =
+                `检测结果: ${result.isReasoningModel ? '✅ 推理模型' : '❌ 普通模型'}\n` +
+                `推理过程: ${result.reasoning ? '✅ 已提取' : '❌ 未找到'}\n` +
+                `最终回答: ${result.finalAnswer ? '✅ 已提取' : '❌ 未找到'}`;
+        }
+
+        function testNormalModel() {
+            const mockData = {
+                model: "gpt-3.5-turbo",
+                choices: [{
+                    message: {
+                        content: "基于您选中的思维导图节点，我为您提供以下扩展建议：\n\n1. 核心要点\n2. 详细说明\n3. 相关链接\n\n这些建议可以帮助您更好地完善思维导图的内容。"
+                    }
+                }]
+            };
+
+            const rawContent = mockData.choices[0].message.content;
+            const result = extractReasoningProcess(mockData, rawContent);
+
+            console.log('=== 普通模型测试 ===');
+            console.log('🧠 推理模型检测:', result.isReasoningModel ? '是' : '否');
+            if (result.reasoning) {
+                console.log('🤔 推理过程:');
+                console.log('%c' + result.reasoning, 'color: #888; font-style: italic;');
+            }
+            if (result.finalAnswer) {
+                console.log('✅ 最终回答:', result.finalAnswer);
+            }
+            console.log('==================');
+
+            document.getElementById('result5').innerHTML =
+                `检测结果: ${result.isReasoningModel ? '✅ 推理模型' : '❌ 普通模型'}\n` +
+                `推理过程: ${result.reasoning ? '✅ 已提取' : '❌ 未找到'}\n` +
+                `最终回答: ${result.finalAnswer ? '✅ 已提取' : '❌ 未找到'}`;
+        }
+    </script>
+</body>
+</html>

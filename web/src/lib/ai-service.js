@@ -145,10 +145,28 @@ export class AIService {
     const content = data.choices[0].message.content
     const suggestions = this.extractSuggestions(content)
 
+    // 检测并处理推理过程
+    const reasoningResult = this.extractReasoningProcess(data, content)
+
     // 打印原始响应到控制台
     console.log('=== LLM API 响应 (Vue版本) ===');
     console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
     console.log('💭 原始回答内容:', content);
+
+    // 如果是推理模型，单独显示推理过程
+    if (reasoningResult.isReasoningModel) {
+      console.log('🧠 推理模型检测: 是');
+      if (reasoningResult.reasoning) {
+        console.log('🤔 推理过程:');
+        console.log('%c' + reasoningResult.reasoning, 'color: #888; font-style: italic;');
+      }
+      if (reasoningResult.finalAnswer) {
+        console.log('✅ 最终回答:', reasoningResult.finalAnswer);
+      }
+    } else {
+      console.log('🧠 推理模型检测: 否');
+    }
+
     if (data.usage) {
       console.log('📈 Token使用情况:', data.usage);
     }
@@ -203,10 +221,28 @@ export class AIService {
     const content = data.message.content
     const suggestions = this.extractSuggestions(content)
 
+    // 检测并处理推理过程
+    const reasoningResult = this.extractReasoningProcess(data, content)
+
     // 打印原始响应到控制台
     console.log('=== Ollama API 响应 (Vue版本) ===');
     console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
     console.log('💭 原始回答内容:', content);
+
+    // 如果是推理模型，单独显示推理过程
+    if (reasoningResult.isReasoningModel) {
+      console.log('🧠 推理模型检测: 是');
+      if (reasoningResult.reasoning) {
+        console.log('🤔 推理过程:');
+        console.log('%c' + reasoningResult.reasoning, 'color: #888; font-style: italic;');
+      }
+      if (reasoningResult.finalAnswer) {
+        console.log('✅ 最终回答:', reasoningResult.finalAnswer);
+      }
+    } else {
+      console.log('🧠 推理模型检测: 否');
+    }
+
     console.log('💡 提取的建议:', suggestions);
     console.log('==================');
 
@@ -214,6 +250,113 @@ export class AIService {
       content,
       suggestions
     }
+  }
+
+  // 检测并提取推理过程
+  extractReasoningProcess(data, rawContent) {
+    const result = {
+      isReasoningModel: false,
+      reasoning: null,
+      finalAnswer: null
+    }
+
+    // 检测方法1: 检查模型名称是否包含推理相关关键词
+    const modelName = (data.model || '').toLowerCase()
+    const reasoningKeywords = ['reasoner', 'reasoning', 'think', 'cot', 'chain-of-thought']
+    const isReasoningByModel = reasoningKeywords.some(keyword => modelName.includes(keyword))
+
+    // 检测方法2: 检查响应结构是否包含推理字段（DeepSeek官方格式）
+    const choice = data.choices && data.choices[0]
+    const hasDeepSeekReasoningField = choice && choice.message && choice.message.reasoning_content
+
+    // 检测方法3: 检查响应结构是否包含其他推理字段（兼容其他格式）
+    const hasOtherReasoningField = choice && (choice.reasoning || choice.message?.reasoning)
+
+    // 检测方法3: 检查内容格式是否符合推理模式
+    const hasReasoningPattern = rawContent && (
+      rawContent.includes('<thinking>') ||
+      rawContent.includes('<reasoning>') ||
+      rawContent.includes('让我思考一下') ||
+      rawContent.includes('思考过程：') ||
+      rawContent.includes('推理过程：') ||
+      /^[\s\S]*?(?:思考|推理|分析)[\s\S]*?(?:结论|答案|回答)[\s\S]*$/i.test(rawContent)
+    )
+
+    result.isReasoningModel = isReasoningByModel || hasDeepSeekReasoningField || hasOtherReasoningField || hasReasoningPattern
+
+    if (result.isReasoningModel) {
+      // 提取推理过程
+      if (choice && choice.message && choice.message.reasoning_content) {
+        // 方法1: DeepSeek官方格式 - 从message.reasoning_content字段提取
+        result.reasoning = choice.message.reasoning_content
+        result.finalAnswer = rawContent // rawContent就是content字段的内容
+      } else if (choice && choice.reasoning) {
+        // 方法2: 从API响应的reasoning字段提取（其他格式）
+        result.reasoning = choice.reasoning
+        result.finalAnswer = rawContent
+      } else if (choice && choice.message && choice.message.reasoning) {
+        // 方法3: 从message.reasoning字段提取（其他格式）
+        result.reasoning = choice.message.reasoning
+        result.finalAnswer = rawContent
+      } else if (rawContent) {
+        // 方法3: 从内容中解析推理过程
+        const reasoningPatterns = [
+          // <thinking>标签格式
+          /<thinking>([\s\S]*?)<\/thinking>/i,
+          /<reasoning>([\s\S]*?)<\/reasoning>/i,
+          // 中文格式
+          /(?:思考过程：|推理过程：|让我思考一下[：:]?)([\s\S]*?)(?:结论：|答案：|回答：|最终答案：)/i,
+          // 分段格式
+          /^([\s\S]*?)(?:\n\n|^)(?:结论|答案|回答|最终答案)[：:]?([\s\S]*)$/i
+        ]
+
+        for (const pattern of reasoningPatterns) {
+          const match = rawContent.match(pattern)
+          if (match) {
+            if (pattern.source.includes('thinking') || pattern.source.includes('reasoning')) {
+              result.reasoning = match[1].trim()
+              result.finalAnswer = rawContent.replace(match[0], '').trim()
+            } else if (pattern.source.includes('思考过程') || pattern.source.includes('推理过程')) {
+              result.reasoning = match[1].trim()
+              const finalMatch = rawContent.match(/(?:结论：|答案：|回答：|最终答案：)([\s\S]*)$/i)
+              result.finalAnswer = finalMatch ? finalMatch[1].trim() : rawContent
+            } else {
+              result.reasoning = match[1].trim()
+              result.finalAnswer = match[2] ? match[2].trim() : rawContent
+            }
+            break
+          }
+        }
+
+        // 如果没有找到明确的分隔，但检测到是推理模型，尝试智能分割
+        if (!result.reasoning && result.isReasoningModel) {
+          const lines = rawContent.split('\n')
+          const thinkingLines = []
+          const answerLines = []
+          let isInAnswer = false
+
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (trimmed.match(/^(?:结论|答案|回答|最终答案|总结)[：:]?/i)) {
+              isInAnswer = true
+            }
+
+            if (isInAnswer) {
+              answerLines.push(line)
+            } else {
+              thinkingLines.push(line)
+            }
+          }
+
+          if (thinkingLines.length > 0 && answerLines.length > 0) {
+            result.reasoning = thinkingLines.join('\n').trim()
+            result.finalAnswer = answerLines.join('\n').trim()
+          }
+        }
+      }
+    }
+
+    return result
   }
 
   // 从AI回复中提取建议
