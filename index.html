@@ -705,6 +705,7 @@ function initAIChat() {
     window.$bus.$on('app_inited', (mindMap) => {
       console.log('思维导图初始化完成:', mindMap);
       mindMapInstance = mindMap;
+      window.mindMapInstance = mindMapInstance; // 确保设置到全局
       bindMindMapEvents(mindMap);
     });
   }
@@ -715,6 +716,7 @@ function initAIChat() {
     if (window.mindMap && !mindMapInstance) {
       console.log('从全局获取思维导图实例:', window.mindMap);
       mindMapInstance = window.mindMap;
+      window.mindMapInstance = mindMapInstance; // 确保设置到全局
       bindMindMapEvents(mindMapInstance);
       return true;
     }
@@ -722,6 +724,7 @@ function initAIChat() {
     if (window.app && window.app.mindMap && !mindMapInstance) {
       console.log('从app获取思维导图实例:', window.app.mindMap);
       mindMapInstance = window.app.mindMap;
+      window.mindMapInstance = mindMapInstance; // 确保设置到全局
       bindMindMapEvents(mindMapInstance);
       return true;
     }
@@ -737,6 +740,7 @@ function initAIChat() {
           if (child.mindMap && !mindMapInstance) {
             console.log('从Vue子组件获取思维导图实例:', child.mindMap);
             mindMapInstance = child.mindMap;
+            window.mindMapInstance = mindMapInstance; // 确保设置到全局
             bindMindMapEvents(mindMapInstance);
             return true;
           }
@@ -747,6 +751,7 @@ function initAIChat() {
               if (grandChild.mindMap && !mindMapInstance) {
                 console.log('从Vue孙组件获取思维导图实例:', grandChild.mindMap);
                 mindMapInstance = grandChild.mindMap;
+                window.mindMapInstance = mindMapInstance; // 确保设置到全局
                 bindMindMapEvents(mindMapInstance);
                 return true;
               }
@@ -806,6 +811,7 @@ function initAIChat() {
       if (foundMindMap) {
         console.log('通过递归搜索找到思维导图实例:', foundMindMap);
         mindMapInstance = foundMindMap;
+        window.mindMapInstance = mindMapInstance; // 确保设置到全局
         bindMindMapEvents(mindMapInstance);
 
         // 立即尝试同步当前激活节点
@@ -1524,19 +1530,15 @@ function addSuggestionToMindMap(text, type = 'child') {
     // 根据类型添加节点 - 使用正确的参数格式
     if (type === 'child') {
       // 添加子节点
-      mindMapInstance.execCommand('INSERT_CHILD_NODE', parentNode, {
-        data: {
-          text: text,
-          uid: generateNodeId()
-        }
+      mindMapInstance.execCommand('INSERT_CHILD_NODE', false, [], {
+        text: text,
+        uid: generateNodeId()
       });
     } else if (type === 'sibling') {
       // 添加兄弟节点
-      mindMapInstance.execCommand('INSERT_NODE', parentNode, {
-        data: {
-          text: text,
-          uid: generateNodeId()
-        }
+      mindMapInstance.execCommand('INSERT_NODE', false, [], {
+        text: text,
+        uid: generateNodeId()
       });
     }
 
@@ -1608,15 +1610,18 @@ function syncCurrentActiveNode() {
 }
 
 // 批量添加结构化分点
-function addStructuredPoints(points) {
-  console.log('addStructuredPoints 被调用:', points);
+async function addStructuredPoints(points) {
+  console.log('🚀 addStructuredPoints 被调用，接收到的数据:', points);
+  console.log('🚀 数据类型:', typeof points, '数据长度:', points ? points.length : 'undefined');
 
   if (!points || points.length === 0) {
+    console.error('❌ 无效的参数：没有分点数据');
     showNotification('❌ 无效的参数：没有分点数据', 'error');
     return;
   }
 
   if (!mindMapInstance) {
+    console.error('❌ 思维导图未初始化');
     showNotification('❌ 思维导图未初始化，请等待加载完成', 'error');
     return;
   }
@@ -1626,46 +1631,153 @@ function addStructuredPoints(points) {
 
   try {
     const activeNodes = mindMapInstance.renderer.activeNodeList;
+    console.log('🔍 当前激活节点:', activeNodes);
+
     if (!activeNodes || activeNodes.length === 0) {
+      console.error('❌ 没有激活的节点');
       showNotification('⚠️ 请先点击选择一个思维导图节点', 'warning');
       return;
     }
 
     const parentNode = activeNodes[0];
-    let addedCount = 0;
+    console.log('🔍 父节点:', parentNode);
+    console.log('🚀 开始批量添加分点到节点:', parentNode.getData().text);
 
-    console.log('批量添加分点:', points, '到节点:', parentNode);
+    // 获取添加前的节点数据
+    const beforeData = mindMapInstance.getData();
+    const beforeNodeCount = countAllNodes(beforeData);
+    console.log(`🔍 添加前节点总数: ${beforeNodeCount}`);
 
-    // 参考ai-mind-map的实现，使用正确的参数格式
+    // 准备批量添加的节点数据
+    const nodesToAdd = [];
     points.forEach((point, index) => {
-      try {
-        // 使用标题作为节点文本
-        const nodeText = point.title || point.text || `分点${index + 1}`;
+      const nodeText = point.title || point.text || `分点${index + 1}`;
+      console.log(`🔍 准备第${index + 1}个分点: "${nodeText}"`);
 
-        // 使用正确的命令格式
-        mindMapInstance.execCommand('INSERT_CHILD_NODE', parentNode, {
+      if (nodeText && nodeText.trim().length > 0) {
+        nodesToAdd.push({
           data: {
             text: nodeText,
-            note: point.content || '', // 将详细内容作为备注
-            uid: `ai_point_${Date.now()}_${index}`
-          }
+            uid: generateNodeId(),
+            note: point.content || '' // 将详细内容作为备注
+          },
+          children: []
         });
-        addedCount++;
-
-        console.log(`成功添加分点: ${nodeText}`);
-      } catch (error) {
-        console.error('添加分点失败:', point, error);
       }
     });
 
-    if (addedCount > 0) {
-      showNotification(`✅ 已添加 ${addedCount} 个分点到思维导图`, 'success');
+    console.log(`🚀 准备批量添加 ${nodesToAdd.length} 个分点:`, nodesToAdd);
+
+    let actualAddedCount = 0;
+    const results = [];
+
+    try {
+      if (nodesToAdd.length > 0) {
+        console.log(`🚀 执行 INSERT_MULTI_CHILD_NODE 命令，批量添加 ${nodesToAdd.length} 个节点`);
+
+        // 使用正确的批量添加命令调用方式
+        mindMapInstance.execCommand('INSERT_MULTI_CHILD_NODE', [], nodesToAdd);
+
+        console.log(`✅ INSERT_MULTI_CHILD_NODE 命令执行完成`);
+
+        // 验证是否添加成功
+        const afterData = mindMapInstance.getData();
+        const afterNodeCount = countAllNodes(afterData);
+        console.log(`🔍 添加后节点总数: ${afterNodeCount}`);
+
+        const addedCount = afterNodeCount - beforeNodeCount;
+        if (addedCount > 0) {
+          actualAddedCount = addedCount;
+          console.log(`✅ 成功批量添加 ${actualAddedCount} 个分点`);
+
+          // 为每个成功添加的节点记录结果
+          nodesToAdd.forEach((nodeData, index) => {
+            results.push({
+              text: nodeData.data.text,
+              success: true,
+              error: ''
+            });
+          });
+
+          // 等待一下让节点渲染完成，然后设置备注
+          setTimeout(async () => {
+            console.log(`🔍 开始为新添加的节点设置备注...`);
+
+            try {
+              // 获取当前激活节点的子节点
+              const currentActiveNodes = mindMapInstance.renderer.activeNodeList;
+              if (currentActiveNodes && currentActiveNodes.length > 0) {
+                const parentNode = currentActiveNodes[0];
+
+                // 遍历父节点的子节点，为新添加的节点设置备注
+                if (parentNode.children && parentNode.children.length > 0) {
+                  const newlyAddedNodes = parentNode.children.slice(-nodesToAdd.length);
+
+                  newlyAddedNodes.forEach((childNode, index) => {
+                    const correspondingPoint = points[index];
+                    if (correspondingPoint && correspondingPoint.content) {
+                      console.log(`🔍 为节点 "${childNode.getData().text}" 设置备注: "${correspondingPoint.content}"`);
+
+                      try {
+                        childNode.setNote(correspondingPoint.content);
+                        console.log(`✅ 成功设置备注`);
+                      } catch (noteError) {
+                        console.error(`❌ 设置备注失败:`, noteError);
+                      }
+                    }
+                  });
+                }
+              }
+            } catch (noteError) {
+              console.error(`❌ 设置备注过程失败:`, noteError);
+            }
+          }, 500);
+
+        } else {
+          console.log(`❌ 批量添加失败，节点数未增加`);
+          console.log(`🔍 添加前: ${beforeNodeCount}, 添加后: ${afterNodeCount}`);
+
+          // 为每个节点记录失败结果
+          nodesToAdd.forEach((nodeData, index) => {
+            results.push({
+              text: nodeData.data.text,
+              success: false,
+              error: '节点数未增加'
+            });
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`❌ 批量添加分点失败:`, error);
+
+      // 为每个节点记录失败结果
+      nodesToAdd.forEach((nodeData, index) => {
+        results.push({
+          text: nodeData.data.text,
+          success: false,
+          error: error.message
+        });
+      });
+    }
+
+    console.log('=== 添加结果统计 ===');
+    console.log(`尝试添加: ${points.length} 个分点`);
+    console.log(`实际添加: ${actualAddedCount} 个分点`);
+
+    // 显示详细结果
+    results.forEach((result, index) => {
+      console.log(`分点${index + 1}: ${result.text} - ${result.success ? '成功' : '失败' + (result.error ? ` (${result.error})` : '')}`);
+    });
+
+    // 显示准确的通知
+    if (actualAddedCount > 0) {
+      showNotification(`✅ 已添加 ${actualAddedCount} 个分点到思维导图`, 'success');
 
       // 触发数据保存
       try {
         if (typeof window.takeOverAppMethods?.saveMindMapData === 'function') {
-          const data = mindMapInstance.getData();
-          window.takeOverAppMethods.saveMindMapData(data);
+          const finalData = mindMapInstance.getData();
+          window.takeOverAppMethods.saveMindMapData(finalData);
         }
       } catch (saveError) {
         console.warn('保存数据失败:', saveError);
@@ -1678,6 +1790,21 @@ function addStructuredPoints(points) {
     console.error('批量添加节点失败:', error);
     showNotification('❌ 批量添加失败: ' + error.message, 'error');
   }
+}
+
+// 辅助函数：递归计算思维导图中的所有节点数量
+function countAllNodes(data) {
+  if (!data) return 0;
+
+  let count = 1; // 当前节点
+
+  if (data.children && Array.isArray(data.children)) {
+    data.children.forEach(child => {
+      count += countAllNodes(child);
+    });
+  }
+
+  return count;
 }
 
 // 切换最小化状态
@@ -1794,18 +1921,63 @@ function selectAllPoints(messageId) {
 }
 
 function addSelectedPoints(messageId) {
+  console.log('🔍 addSelectedPoints 被调用，messageId:', messageId);
+
+  // 使用更灵活的选择器
   const checkboxes = document.querySelectorAll(`#${messageId} .point-checkbox:checked`);
+  console.log('🔍 找到选中的复选框数量:', checkboxes.length);
+
   if (checkboxes.length === 0) {
     showNotification('请先选择要添加的分点', 'warning');
     return;
   }
 
   const selectedPoints = [];
-  checkboxes.forEach(checkbox => {
+  checkboxes.forEach((checkbox, index) => {
+    console.log(`🔍 处理第${index + 1}个复选框:`, checkbox);
+    console.log(`🔍 复选框HTML:`, checkbox.outerHTML);
+
     const pointDiv = checkbox.closest('.structured-point');
-    const title = pointDiv.querySelector('.point-title').textContent;
-    const content = pointDiv.querySelector('.point-content').textContent;
-    const keywords = Array.from(pointDiv.querySelectorAll('.keyword')).map(k => k.textContent);
+    if (!pointDiv) {
+      console.error('❌ 未找到 .structured-point 容器');
+      console.log('🔍 复选框父级元素:', checkbox.parentElement);
+      return;
+    }
+
+    console.log(`🔍 找到的分点容器:`, pointDiv);
+    console.log(`🔍 分点容器HTML:`, pointDiv.outerHTML);
+
+    const titleElement = pointDiv.querySelector('.point-title');
+    const contentElement = pointDiv.querySelector('.point-content');
+    const keywordElements = pointDiv.querySelectorAll('.keyword');
+
+    console.log(`🔍 标题元素:`, titleElement);
+    console.log(`🔍 内容元素:`, contentElement);
+    console.log(`🔍 关键词元素:`, keywordElements);
+
+    if (!titleElement) {
+      console.error('❌ 未找到 .point-title 元素');
+      console.log('🔍 分点容器内的所有元素:', pointDiv.children);
+      return;
+    }
+
+    const title = titleElement.textContent.trim();
+    const content = contentElement ? contentElement.textContent.trim() : '';
+    const keywords = Array.from(keywordElements).map(k => k.textContent.trim());
+
+    console.log(`🔍 提取的分点数据:`, {
+      title: `"${title}"`,
+      content: `"${content}"`,
+      keywords: keywords,
+      titleLength: title.length,
+      contentLength: content.length
+    });
+
+    // 验证数据有效性
+    if (!title || title.length === 0) {
+      console.error('❌ 分点标题为空，跳过此分点');
+      return;
+    }
 
     selectedPoints.push({
       title,
@@ -1814,7 +1986,16 @@ function addSelectedPoints(messageId) {
     });
   });
 
-  addStructuredPoints(selectedPoints);
+  console.log('🔍 最终选中的分点:', selectedPoints);
+  console.log('🔍 有效分点数量:', selectedPoints.length);
+
+  if (selectedPoints.length > 0) {
+    console.log('🚀 调用 addStructuredPoints，传入数据:', selectedPoints);
+    addStructuredPoints(selectedPoints);
+  } else {
+    console.error('❌ 没有有效的分点数据');
+    showNotification('❌ 没有有效的分点数据', 'error');
+  }
 }
 
 // 通知系统
@@ -1938,16 +2119,36 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
       window.onload = async () => {
-        if (!window.takeOverApp) return
+        console.log('🔍 window.onload 被调用，takeOverApp:', window.takeOverApp);
+
+        // 修复：确保思维导图能够初始化
+        if (!window.takeOverApp) {
+          console.log('⚠️ takeOverApp为false，但仍然尝试初始化思维导图');
+          // 不要直接return，而是尝试初始化
+        }
+
         // 请求数据
         const data = await getDataFromBackend()
+        console.log('🔍 获取到后端数据:', data);
+
         // 设置全局的方法
         setTakeOverAppMethods(data)
+        console.log('🔍 设置全局方法完成');
+
         // 思维导图实例创建完成事件
-        window.$bus.$on('app_inited', mindMap => {
-          console.log(mindMap)
-        })
+        if (window.$bus && window.$bus.$on) {
+          window.$bus.$on('app_inited', mindMap => {
+            console.log('🎉 思维导图实例创建完成:', mindMap);
+            window.mindMapInstance = mindMap;
+          });
+        }
+
         // 可以通过window.$bus.$on()来监听应用的一些事件
         // 实例化页面
-        window.initApp()
+        if (window.initApp && typeof window.initApp === 'function') {
+          console.log('🚀 调用 initApp');
+          window.initApp();
+        } else {
+          console.log('⚠️ initApp 函数不存在');
+        }
       }</script><script src="dist/js/chunk-vendors.js?685589f1058f5fbca0d2"></script><script src="dist/js/app.js?685589f1058f5fbca0d2"></script></body></html>
