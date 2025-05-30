@@ -675,6 +675,94 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* 思考状态动画 - 跳动的点 */
+@keyframes thinking-dots {
+  0%, 20% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+}
+
+.thinking-dots {
+  display: inline-block;
+}
+
+.thinking-dots .dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #666;
+  margin: 0 1px;
+  animation: thinking-dots 1.4s infinite ease-in-out;
+}
+
+.thinking-dots .dot:nth-child(1) { animation-delay: 0s; }
+.thinking-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* 打字机效果 */
+.typewriter-text {
+  overflow: hidden;
+  border-right: 2px solid #409eff;
+  white-space: nowrap;
+  animation: typing 0.5s steps(1, end), blink-caret 1s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent; }
+  50% { border-color: #409eff; }
+}
+
+/* 推理模型样式 */
+.reasoning-content {
+  background: #f8f9fa;
+  border-left: 3px solid #888;
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.reasoning-content::before {
+  content: "🤔 思考过程：";
+  font-weight: 600;
+  color: #888;
+  display: block;
+  margin-bottom: 6px;
+  font-style: normal;
+}
+
+.final-answer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.final-answer::before {
+  content: "✅ 最终回答：";
+  font-weight: 600;
+  color: #409eff;
+  display: block;
+  margin-bottom: 6px;
+}
 </style>
 
 <script>
@@ -1193,7 +1281,12 @@ async function sendMessage() {
   try {
     // 调用AI API或模拟回复
     const response = await callAI(message);
-    addMessage('assistant', response.content, response.suggestions, response.structuredPoints);
+
+    // 如果是模拟回复或非流式响应，使用传统方式添加消息
+    if (response && response.content) {
+      addMessage('assistant', response.content, response.suggestions, response.structuredPoints);
+    }
+    // 流式响应的消息已经在callRealAI中处理了
   } catch (error) {
     console.error('AI回复失败:', error);
     addMessage('assistant', '抱歉，我现在无法回复。请检查AI配置或稍后再试。');
@@ -1260,7 +1353,8 @@ async function callRealAI(message) {
     model,
     messages,
     max_tokens: 2000,
-    temperature: 0.7
+    temperature: 0.7,
+    stream: true
   };
 
   const response = await fetch(`${baseURL}/chat/completions`, {
@@ -1277,8 +1371,119 @@ async function callRealAI(message) {
     throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
-  const rawContent = data.choices[0].message.content;
+  // 处理流式响应
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let rawContent = '';
+  let reasoning = '';
+  let finalAnswer = '';
+  let isReasoningModel = false;
+  let buffer = '';
+
+  // 移除加载消息，准备显示流式内容
+  const loadingMessage = document.getElementById('loadingMessage');
+  if (loadingMessage) {
+    loadingMessage.remove();
+  }
+
+  // 创建流式消息容器
+  const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const streamingDiv = document.createElement('div');
+  streamingDiv.className = 'message-item assistant';
+  streamingDiv.id = messageId;
+  streamingDiv.innerHTML = `
+    <div class="message-avatar">🤖</div>
+    <div class="message-content">
+      <div id="${messageId}_reasoning" class="reasoning-content" style="display: none;"></div>
+      <div id="${messageId}_content" class="message-text"></div>
+    </div>
+  `;
+
+  const messagesContainer = document.getElementById('chatMessages');
+  messagesContainer.appendChild(streamingDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  const reasoningElement = document.getElementById(`${messageId}_reasoning`);
+  const contentElement = document.getElementById(`${messageId}_content`);
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 保留最后一行（可能不完整）
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta;
+
+            if (!delta) continue;
+
+            // 检测是否为推理模型
+            if (delta.reasoning_content !== undefined) {
+              isReasoningModel = true;
+              if (delta.reasoning_content) {
+                reasoning += delta.reasoning_content;
+                reasoningElement.textContent = reasoning;
+                reasoningElement.style.display = 'block';
+              }
+            }
+
+            if (delta.content) {
+              rawContent += delta.content;
+              finalAnswer += delta.content;
+
+              // 实现打字机效果
+              await typewriterEffect(contentElement, delta.content);
+            }
+
+            // 自动滚动到底部
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          } catch (e) {
+            console.warn('解析流式数据失败:', e, data);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('流式处理失败:', error);
+    contentElement.textContent = '抱歉，处理响应时出现错误。';
+  }
+
+  // 如果是推理模型但没有检测到reasoning_content，尝试从内容中提取
+  if (!isReasoningModel && rawContent) {
+    const reasoningResult = extractReasoningFromContent(rawContent);
+    if (reasoningResult.isReasoningModel) {
+      isReasoningModel = true;
+      reasoning = reasoningResult.reasoning;
+      finalAnswer = reasoningResult.finalAnswer;
+
+      if (reasoning) {
+        reasoningElement.textContent = reasoning;
+        reasoningElement.style.display = 'block';
+      }
+
+      contentElement.innerHTML = `<div class="final-answer">${finalAnswer}</div>`;
+    }
+  }
+
+  // 构造完整的数据对象用于后续处理
+  const data = {
+    choices: [{
+      message: {
+        content: rawContent,
+        reasoning_content: reasoning
+      }
+    }],
+    model: model
+  };
 
   // 检测并处理推理过程
   const reasoningResult = extractReasoningProcess(data, rawContent);
@@ -1319,7 +1524,59 @@ async function callRealAI(message) {
   console.log('📋 结构化分点:', structuredPoints);
   console.log('===============');
 
-  return { content, suggestions, structuredPoints };
+  // 为流式消息添加建议和结构化分点
+  if (suggestions.length > 0 || structuredPoints.length > 0) {
+    const streamingMessage = document.getElementById(messageId);
+    if (streamingMessage) {
+      const messageContent = streamingMessage.querySelector('.message-content');
+
+      // 添加建议
+      if (suggestions.length > 0) {
+        const suggestionButtons = suggestions.map(s =>
+          `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${s.text}', '${s.type || 'child'}')">${s.text}</button>`
+        ).join('');
+
+        const suggestionsHtml = `
+          <div class="suggestions">
+            <div class="suggestions-title">💡 AI建议</div>
+            <div class="suggestions-list">${suggestionButtons}</div>
+          </div>
+        `;
+        messageContent.insertAdjacentHTML('beforeend', suggestionsHtml);
+      }
+
+      // 添加结构化分点
+      if (structuredPoints.length > 0) {
+        const pointsHtml = structuredPoints.map((point, index) => `
+          <div class="structured-point" data-point-id="${point.id || index}">
+            <div class="point-header">
+              <input type="checkbox" class="point-checkbox" id="point_${messageId}_${index}">
+              <label for="point_${messageId}_${index}" class="point-title">${point.title}</label>
+            </div>
+            <div class="point-content">${point.content}</div>
+            ${point.keywords ? `<div class="point-keywords">${point.keywords.map(k => `<span class="keyword">${k}</span>`).join('')}</div>` : ''}
+          </div>
+        `).join('');
+
+        const structuredPointsHtml = `
+          <div class="structured-points">
+            <div class="points-header">
+              <div class="points-title">📋 结构化分点</div>
+              <div class="points-actions">
+                <button class="select-all-btn" onclick="selectAllPoints('${messageId}')">全选</button>
+                <button class="add-selected-btn" onclick="addSelectedPoints('${messageId}')">添加选中</button>
+              </div>
+            </div>
+            <div class="points-list">${pointsHtml}</div>
+          </div>
+        `;
+        messageContent.insertAdjacentHTML('beforeend', structuredPointsHtml);
+      }
+    }
+  }
+
+  // 流式响应不需要返回内容，因为已经直接显示了
+  return null;
 }
 
 // 获取系统提示词
@@ -1384,6 +1641,52 @@ ${index + 1}. 节点："${nodeInfo.text}"`;
   }
 
   return prompt;
+}
+
+// 打字机效果函数
+async function typewriterEffect(element, text) {
+  return new Promise((resolve) => {
+    let currentText = element.textContent || '';
+    element.textContent = currentText + text;
+
+    // 简单的延迟，可以根据需要调整
+    setTimeout(resolve, 10);
+  });
+}
+
+// 从内容中提取推理过程（用于非官方推理模型格式）
+function extractReasoningFromContent(content) {
+  const result = {
+    isReasoningModel: false,
+    reasoning: '',
+    finalAnswer: content
+  };
+
+  // 检测推理模式的关键词
+  const reasoningKeywords = ['让我思考', '思考过程', '推理过程', '<thinking>', '<reasoning>'];
+  const hasReasoningPattern = reasoningKeywords.some(keyword => content.includes(keyword));
+
+  if (hasReasoningPattern) {
+    result.isReasoningModel = true;
+
+    // 尝试提取推理过程
+    const reasoningPatterns = [
+      /<thinking>([\s\S]*?)<\/thinking>/i,
+      /<reasoning>([\s\S]*?)<\/reasoning>/i,
+      /(?:思考过程：|推理过程：|让我思考一下[：:]?)([\s\S]*?)(?:结论：|答案：|回答：|最终答案：)/i,
+    ];
+
+    for (const pattern of reasoningPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        result.reasoning = match[1].trim();
+        result.finalAnswer = content.replace(match[0], '').trim();
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 // 检测并提取推理过程
@@ -1778,7 +2081,7 @@ function setLoading(loading) {
     loadingDiv.innerHTML = `
       <div class="message-avatar loading">🤖</div>
       <div class="message-content">
-        <div class="message-text">AI正在思考中...</div>
+        <div class="message-text">AI正在思考中<span class="thinking-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
       </div>
     `;
     messagesContainer.appendChild(loadingDiv);
