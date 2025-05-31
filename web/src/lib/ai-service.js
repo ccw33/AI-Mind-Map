@@ -1,7 +1,7 @@
 // AI服务接口 - 统一的AI调用接口，支持多种AI提供商
 // 移植自ai-mind-map项目，适配Vue.js环境
 
-import { getCurrentAIConfig, validateAIConfig, debugLog, getMindMapAIConfig, AI_PROVIDERS } from './ai-config.js'
+import { getCurrentAIConfig, validateAIConfig, debugLog, getMindMapAIConfig, AI_PROVIDERS, buildSystemPrompt } from './ai-config.js'
 
 // AI服务类
 export class AIService {
@@ -44,8 +44,8 @@ export class AIService {
   buildMessages(userMessage, context) {
     const messages = []
 
-    // 系统提示词
-    let systemPrompt = '你是一个专业的思维导图助手，帮助用户扩展和完善思维导图内容。'
+    // 使用新的系统提示词构建逻辑
+    let systemPrompt = buildSystemPrompt()
 
     if (context && context.selectedNode) {
       const { text, hierarchy, hierarchyWithNotes } = context.selectedNode

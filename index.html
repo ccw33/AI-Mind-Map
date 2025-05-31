@@ -11,6 +11,9 @@
         console.log(error)
       }</script><link href="dist/css/chunk-vendors.css?685589f1058f5fbca0d2" rel="stylesheet"><link href="dist/css/app.css?685589f1058f5fbca0d2" rel="stylesheet"></head><body><noscript><strong>We're sorry but thoughts doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div>
 
+<!-- 引入marked.js Markdown解析库 -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
 <!-- AI聊天浮窗 -->
 <div id="aiChatBot" class="ai-chat-bot" style="display: none;">
   <div class="chat-header" onclick="toggleMinimize()">
@@ -80,9 +83,17 @@
       <label>基础URL:</label>
       <input id="baseURL" placeholder="https://api.openai.com/v1">
     </div>
+    <div class="config-item">
+      <label>自定义提示词 (可选):</label>
+      <textarea id="customPrompt" rows="4" placeholder="输入自定义系统提示词，留空则使用默认提示词"></textarea>
+      <div class="config-tip">
+        系统会自动在您的提示词末尾添加JSON格式要求，确保AI回复包含结构化分点。
+      </div>
+    </div>
     <div class="config-actions">
       <button onclick="saveConfig()">保存配置</button>
       <button onclick="testConnection()">测试连接</button>
+      <button onclick="previewFullPrompt()">预览完整提示词</button>
     </div>
   </div>
 </div>
@@ -93,7 +104,9 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 520px;
+  width: 50vw;
+  max-width: 800px;
+  min-width: 400px;
   max-height: 95vh;
   min-height: 400px;
   background: #fff;
@@ -329,11 +342,109 @@
   position: relative;
 }
 
+/* AI回复使用更大的宽度 */
+.message-item.assistant .message-content {
+  max-width: calc(100% - 60px);
+}
+
 .message-text {
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
   white-space: pre-wrap;
+}
+
+/* Markdown样式 */
+.message-text h1, .message-text h2, .message-text h3,
+.message-text h4, .message-text h5, .message-text h6 {
+  margin: 8px 0 4px 0;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.3;
+}
+
+.message-text h1 { font-size: 18px; }
+.message-text h2 { font-size: 16px; }
+.message-text h3 { font-size: 15px; }
+.message-text h4, .message-text h5, .message-text h6 { font-size: 14px; }
+
+.message-text p {
+  margin: 2px 0;
+  line-height: 1.3;
+}
+
+.message-text ul, .message-text ol {
+  margin: 2px 0;
+  padding-left: 16px;
+}
+
+.message-text li {
+  margin: 1px 0;
+  line-height: 1.3;
+}
+
+.message-text code {
+  background: #f5f5f5;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  color: #e83e8c;
+}
+
+.message-text pre {
+  background: #f8f9fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.message-text pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.message-text blockquote {
+  border-left: 4px solid #409eff;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  color: #666;
+  font-style: italic;
+}
+
+.message-text strong {
+  font-weight: 600;
+  color: #333;
+}
+
+.message-text em {
+  font-style: italic;
+  color: #666;
+}
+
+.message-text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.message-text th, .message-text td {
+  border: 1px solid #e8e8e8;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.message-text th {
+  background: #f8f9fa;
+  font-weight: 600;
 }
 
 .suggestions {
@@ -455,8 +566,9 @@
 .ai-config-panel {
   position: fixed;
   bottom: 20px;
-  right: 560px;
+  right: calc(50vw + 40px);
   width: 350px;
+  max-width: calc(50vw - 60px);
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -530,12 +642,27 @@
 }
 
 .config-item input,
-.config-item select {
+.config-item select,
+.config-item textarea {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #e8e8e8;
   border-radius: 6px;
   font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.config-item textarea {
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+.config-tip {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 
 .config-actions {
@@ -879,7 +1006,8 @@ let aiConfig = {
   provider: 'openai',
   apiKey: '',
   model: 'gpt-3.5-turbo',
-  baseURL: 'https://api.openai.com/v1'
+  baseURL: 'https://api.openai.com/v1',
+  customPrompt: ''
 };
 
 // 初始化AI聊天功能
@@ -1102,7 +1230,8 @@ function bindMindMapEvents(mindMap) {
             tempDiv.innerHTML = currentRawText;
             currentCleanText = tempDiv.textContent || tempDiv.innerText || currentRawText;
           } else {
-            currentCleanText = currentRawText || '';
+            // 确保currentCleanText始终是字符串
+            currentCleanText = String(currentRawText || '');
           }
 
           // 如果当前激活节点与记录的不同，更新选中节点
@@ -1144,7 +1273,8 @@ function updateSelectedNode(node) {
       tempDiv.innerHTML = rawText;
       selectedNodeText = tempDiv.textContent || tempDiv.innerText || rawText;
     } else {
-      selectedNodeText = rawText || '';
+      // 确保selectedNodeText始终是字符串
+      selectedNodeText = String(rawText || '');
     }
 
     selectedNodeHierarchy = getNodeHierarchy(node);
@@ -1190,7 +1320,8 @@ function getNodeHierarchy(node) {
         tempDiv.innerHTML = rawText;
         text = tempDiv.textContent || tempDiv.innerText || rawText;
       } else {
-        text = rawText || '';
+        // 确保text始终是字符串
+        text = String(rawText || '');
       }
 
       if (text) {
@@ -1228,7 +1359,8 @@ function getNodeHierarchyWithNotes(node) {
         tempDiv.innerHTML = rawText;
         text = tempDiv.textContent || tempDiv.innerText || rawText;
       } else {
-        text = rawText || '';
+        // 确保text始终是字符串
+        text = String(rawText || '');
       }
 
       // 获取节点备注
@@ -1384,11 +1516,10 @@ async function sendMessage() {
     // 调用AI API或模拟回复
     const response = await callAI(message);
 
-    // 如果是模拟回复或非流式响应，使用传统方式添加消息
-    if (response && response.content) {
-      addMessage('assistant', response.content, response.suggestions, response.structuredPoints);
-    }
-    // 流式响应的消息已经在callRealAI中处理了
+    // 逐字输出的模拟回复已经在streamResponse中处理了消息显示
+    // 真实API的流式响应也已经在callRealAI中处理了
+    // 这里不需要再次添加消息
+    console.log('✅ AI回复完成:', response);
   } catch (error) {
     console.error('AI回复失败:', error);
     addMessage('assistant', '抱歉，我现在无法回复。请检查AI配置或稍后再试。');
@@ -1403,8 +1534,8 @@ async function callAI(message) {
   if (aiConfig.apiKey && aiConfig.apiKey.trim()) {
     return await callRealAI(message);
   } else {
-    // 否则使用模拟回复
-    return await simulateAIResponse(message);
+    // 否则使用逐字输出的模拟回复
+    return await simulateAIResponseStreaming(message);
   }
 }
 
@@ -1626,17 +1757,24 @@ async function callRealAI(message) {
   console.log('📋 结构化分点:', structuredPoints);
   console.log('===============');
 
-  // 清理显示内容中的JSON部分
+  // 清理显示内容中的JSON部分并应用Markdown解析
   if (contentElement) {
     const cleanedContent = cleanResponseContent(contentElement.textContent || '');
     if (cleanedContent !== (contentElement.textContent || '')) {
       // 如果是推理模型且有最终回答，显示最终回答部分
       if (isReasoningModel && finalAnswer) {
         const cleanedFinalAnswer = cleanResponseContent(finalAnswer);
-        contentElement.innerHTML = `<div class="final-answer">${cleanedFinalAnswer}</div>`;
+        const parsedFinalAnswer = parseMarkdown(cleanedFinalAnswer);
+        contentElement.innerHTML = `<div class="final-answer">${parsedFinalAnswer}</div>`;
       } else {
-        contentElement.textContent = cleanedContent;
+        const parsedContent = parseMarkdown(cleanedContent);
+        contentElement.innerHTML = parsedContent;
       }
+    } else {
+      // 即使内容没有变化，也应用Markdown解析
+      const currentContent = contentElement.textContent || '';
+      const parsedContent = parseMarkdown(currentContent);
+      contentElement.innerHTML = parsedContent;
     }
   }
 
@@ -1648,9 +1786,11 @@ async function callRealAI(message) {
 
       // 添加建议
       if (suggestions.length > 0) {
-        const suggestionButtons = suggestions.map(s =>
-          `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${s.text}', '${s.type || 'child'}')">${s.text}</button>`
-        ).join('');
+        const suggestionButtons = suggestions.map(s => {
+          // 清理建议文本中的Markdown符号
+          const cleanText = s.text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`(.*?)`/g, '$1');
+          return `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${cleanText}', '${s.type || 'child'}')">${cleanText}</button>`;
+        }).join('');
 
         const suggestionsHtml = `
           <div class="suggestions">
@@ -1695,11 +1835,34 @@ async function callRealAI(message) {
   return null;
 }
 
+// 获取用户自定义提示词
+function getCustomPromptFromStorage() {
+  try {
+    const aiConfig = localStorage.getItem('ai_config');
+    if (aiConfig) {
+      const config = JSON.parse(aiConfig);
+      return config.customPrompt || '';
+    }
+  } catch (error) {
+    console.warn('获取自定义提示词失败:', error);
+  }
+  return '';
+}
+
 // 获取系统提示词
 function getSystemPrompt() {
-  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
+  // 获取用户自定义提示词（从localStorage）
+  const customPrompt = getCustomPromptFromStorage();
 
-  let prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
+  // 构建基础提示词
+  let prompt = '';
+
+  if (customPrompt && customPrompt.trim()) {
+    // 使用用户自定义提示词
+    prompt = customPrompt.trim();
+  } else {
+    // 使用默认提示词
+    prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
 
 核心能力：
 1. 分析思维导图节点内容
@@ -1710,18 +1873,16 @@ function getSystemPrompt() {
 回复要求：
 - 首先提供一个简洁的总体回答（100-200字）
 - 然后提供结构化的分点供用户选择添加到思维导图
-- 保持逻辑性和条理性
+- 保持逻辑性和条理性`;
+  }
 
-重要：请按以下格式回复：
-1. 先给出一个简洁的总体回答
-2. 然后在回答的最后，用以下JSON格式提供结构化分点：
-${jsonExample}
+  // 添加固定的JSON格式要求
+  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
 
-每个分点应该：
-- 有一个简洁的标题
-- 包含详细的解释内容
-- 可以作为思维导图的节点添加
-- 具有实际价值，帮助用户扩展思维导图`;
+  prompt += `
+
+重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：
+${jsonExample}`;
 
   // 获取当前选中节点的详细上下文信息
   if (selectedNodeText && selectedNodeHierarchy.length > 0) {
@@ -1920,74 +2081,140 @@ function cleanResponseContent(content) {
 
 // 解析结构化分点
 function parseStructuredPoints(content) {
+  console.log('🔍 parseStructuredPoints 开始解析内容:', content.substring(0, 200) + '...');
+
   try {
     // 查找JSON代码块
     const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+    console.log('🔍 JSON匹配结果:', jsonMatch ? '找到JSON块' : '未找到JSON块');
+
     if (!jsonMatch) {
+      console.log('❌ 未找到JSON代码块');
       return [];
     }
 
-    const jsonData = JSON.parse(jsonMatch[1]);
+    const jsonString = jsonMatch[1];
+    console.log('🔍 提取的JSON字符串:', jsonString);
+
+    const jsonData = JSON.parse(jsonString);
+    console.log('🔍 解析后的JSON数据:', jsonData);
+
     if (jsonData.structuredPoints && Array.isArray(jsonData.structuredPoints)) {
-      return jsonData.structuredPoints.map((point, index) => ({
+      const result = jsonData.structuredPoints.map((point, index) => ({
         id: point.id || `point_${index + 1}`,
         title: point.title || `要点${index + 1}`,
         content: point.content || '',
         keywords: Array.isArray(point.keywords) ? point.keywords : []
       }));
+      console.log('✅ 成功解析结构化分点:', result);
+      return result;
+    } else {
+      console.log('❌ JSON数据中没有有效的structuredPoints数组');
     }
   } catch (error) {
-    console.error('解析结构化分点失败:', error);
+    console.error('❌ 解析结构化分点失败:', error);
+    console.error('错误详情:', error.message);
   }
   return [];
 }
 
-// 模拟AI回复
-async function simulateAIResponse(message) {
-  // 模拟网络延迟
-  await new Promise(resolve => setTimeout(resolve, 1500));
+// 逐字输出AI回复
+async function simulateAIResponseStreaming(message) {
+  // 使用全局的selectedNodeText变量，而不是currentSelectedNode
+  let currentSelectedNodeText = selectedNodeText || '当前话题';
 
-  let content = '';
+  // 确保currentSelectedNodeText始终是字符串
+  if (typeof currentSelectedNodeText !== 'string') {
+    currentSelectedNodeText = String(currentSelectedNodeText);
+  }
+
+  console.log('🎯 当前选中节点文本:', currentSelectedNodeText);
+
+  // 准备完整的回复内容
+  let fullContent = '';
   let suggestions = [];
   let structuredPoints = [];
 
   if (message.includes('扩展')) {
-    content = `关于"${selectedNodeText}"的扩展建议：\n\n我为您提供了详细的扩展方案，包括多个维度的分析。`;
+    fullContent = `## 关于"${currentSelectedNodeText}"的扩展建议
+
+我为您提供了详细的扩展方案，包括多个维度的分析：
+
+### 🎯 基础概念
+- **定义**: ${currentSelectedNodeText}的核心定义和基本原理
+- **特征**: 主要特征和识别要素
+- **分类**: 不同类型和分类方法
+
+### 🔧 技术特点
+- **优势**: ${currentSelectedNodeText}的主要技术优势
+- **局限**: 当前存在的技术局限
+- **创新**: 最新的技术创新点
+
+### 🌍 应用领域
+- **商业**: 在商业环境中的具体应用
+- **技术**: 在技术开发中的实际应用
+- **教育**: 在教育培训中的应用方式
+
+### 📈 发展趋势
+- **现状**: ${currentSelectedNodeText}的当前发展状态
+- **趋势**: 未来发展方向和趋势
+- **机遇**: 潜在的发展机遇`;
+
     suggestions = [
       { text: '定义和概念', type: 'child' },
       { text: '应用场景', type: 'child' },
       { text: '相关技术', type: 'child' }
     ];
 
-    // 生成结构化分点
     structuredPoints = [
       {
         id: 'point_1',
         title: '基础概念',
-        content: `${selectedNodeText}的核心定义和基本原理`,
+        content: `${currentSelectedNodeText}的核心定义和基本原理`,
         keywords: ['定义', '原理', '基础']
       },
       {
         id: 'point_2',
         title: '技术特点',
-        content: `${selectedNodeText}的主要技术特征和优势`,
+        content: `${currentSelectedNodeText}的主要技术特征和优势`,
         keywords: ['特点', '优势', '技术']
       },
       {
         id: 'point_3',
         title: '应用领域',
-        content: `${selectedNodeText}在各个行业的具体应用`,
+        content: `${currentSelectedNodeText}在各个行业的具体应用`,
         keywords: ['应用', '行业', '实践']
       },
       {
         id: 'point_4',
         title: '发展趋势',
-        content: `${selectedNodeText}的未来发展方向和趋势`,
+        content: `${currentSelectedNodeText}的未来发展方向和趋势`,
         keywords: ['趋势', '发展', '未来']
       }
     ];
   } else if (message.includes('解释')) {
-    content = `"${selectedNodeText}"的详细解释：\n\n我为您提供了全面的解释，包含多个层面的分析。`;
+    fullContent = `## "${currentSelectedNodeText}"的详细解释
+
+我为您提供了全面的解释，包含多个层面的分析：
+
+### 📖 基本含义
+**${currentSelectedNodeText}** 是一个重要的概念，其基本定义包括：
+- 核心定义和基本内涵
+- 主要特征和识别标准
+- 与相关概念的区别和联系
+
+### 🔍 核心要素
+构成${currentSelectedNodeText}的关键要素包括：
+- **主要组成部分**: 核心构成要素
+- **关键特征**: 重要的识别特征
+- **内在逻辑**: 各要素间的关系
+
+### ⚙️ 运作机制
+${currentSelectedNodeText}的工作原理和运作方式：
+- **基本原理**: 底层的工作机制
+- **运作流程**: 具体的操作步骤
+- **影响因素**: 关键的影响变量`;
+
     suggestions = [
       { text: '核心特点', type: 'child' },
       { text: '工作原理', type: 'child' }
@@ -1997,24 +2224,45 @@ async function simulateAIResponse(message) {
       {
         id: 'explain_1',
         title: '基本含义',
-        content: `${selectedNodeText}的基本定义和含义`,
+        content: `${currentSelectedNodeText}的基本定义和含义`,
         keywords: ['定义', '含义', '基本']
       },
       {
         id: 'explain_2',
         title: '核心要素',
-        content: `构成${selectedNodeText}的关键要素和组成部分`,
+        content: `构成${currentSelectedNodeText}的关键要素和组成部分`,
         keywords: ['要素', '组成', '核心']
       },
       {
         id: 'explain_3',
         title: '运作机制',
-        content: `${selectedNodeText}的工作原理和运作方式`,
+        content: `${currentSelectedNodeText}的工作原理和运作方式`,
         keywords: ['原理', '机制', '运作']
       }
     ];
   } else if (message.includes('应用')) {
-    content = `"${selectedNodeText}"的应用场景分析：\n\n我整理了多个实际应用场景供您参考。`;
+    fullContent = `## "${currentSelectedNodeText}"的应用场景分析
+
+我整理了多个实际应用场景供您参考：
+
+### 💼 商业场景
+在商业环境中，${currentSelectedNodeText}的应用包括：
+- **企业管理**: 提升管理效率和决策质量
+- **市场营销**: 优化营销策略和客户体验
+- **产品开发**: 改进产品设计和功能实现
+
+### 🔧 技术场景
+在技术开发中的实际应用：
+- **系统架构**: 优化系统设计和性能
+- **开发流程**: 提升开发效率和代码质量
+- **运维管理**: 改善系统稳定性和可维护性
+
+### 📚 教育场景
+在教育培训中的应用方式：
+- **课程设计**: 优化教学内容和方法
+- **学习体验**: 提升学习效果和参与度
+- **技能培训**: 加强实践能力和专业技能`;
+
     suggestions = [
       { text: '商业应用', type: 'child' },
       { text: '技术应用', type: 'child' }
@@ -2024,24 +2272,39 @@ async function simulateAIResponse(message) {
       {
         id: 'app_1',
         title: '商业场景',
-        content: `${selectedNodeText}在商业环境中的应用`,
+        content: `${currentSelectedNodeText}在商业环境中的应用`,
         keywords: ['商业', '企业', '市场']
       },
       {
         id: 'app_2',
         title: '技术场景',
-        content: `${selectedNodeText}在技术开发中的应用`,
+        content: `${currentSelectedNodeText}在技术开发中的应用`,
         keywords: ['技术', '开发', '工程']
       },
       {
         id: 'app_3',
         title: '教育场景',
-        content: `${selectedNodeText}在教育培训中的应用`,
+        content: `${currentSelectedNodeText}在教育培训中的应用`,
         keywords: ['教育', '培训', '学习']
       }
     ];
   } else {
-    content = `关于"${selectedNodeText}"，我理解您的问题。这是一个很有趣的话题，我为您提供了多角度的分析。`;
+    fullContent = `## 关于"${currentSelectedNodeText}"的分析
+
+我理解您的问题，这是一个很有趣的话题。让我为您提供多角度的分析：
+
+### 🎯 概述
+**${currentSelectedNodeText}** 是一个重要的主题，具有以下特点：
+- 总体概述和基本认知
+- 重要性和价值分析
+- 当前的发展状况
+
+### 🔑 关键点
+需要重点关注的核心方面：
+- **核心要素**: 最重要的组成部分
+- **关键特征**: 主要的识别标准
+- **重点方向**: 需要深入了解的方面`;
+
     suggestions = [
       { text: '深入了解', type: 'child' },
       { text: '实践应用', type: 'child' }
@@ -2051,34 +2314,443 @@ async function simulateAIResponse(message) {
       {
         id: 'general_1',
         title: '概述',
-        content: `${selectedNodeText}的总体概述和重要性`,
+        content: `${currentSelectedNodeText}的总体概述和重要性`,
         keywords: ['概述', '重要性', '总体']
       },
       {
         id: 'general_2',
         title: '关键点',
-        content: `关于${selectedNodeText}需要重点关注的方面`,
+        content: `关于${currentSelectedNodeText}需要重点关注的方面`,
         keywords: ['关键', '重点', '核心']
       }
     ];
   }
 
-  return { content, suggestions, structuredPoints };
+  // 执行逐字输出
+  return await streamResponse(fullContent, suggestions, structuredPoints);
 }
 
-// 从AI回复中提取建议
+// 逐字输出函数
+async function streamResponse(fullContent, suggestions, structuredPoints) {
+  // 确保fullContent是字符串
+  if (typeof fullContent !== 'string') {
+    console.error('streamResponse接收到非字符串fullContent:', typeof fullContent, fullContent);
+    fullContent = String(fullContent || '');
+  }
+
+  console.log('🚀 开始逐字输出，内容长度:', fullContent.length);
+  console.log('🚀 内容类型:', typeof fullContent);
+  console.log('🚀 内容预览:', fullContent.substring(0, 100));
+
+  // 创建消息容器
+  const messagesContainer = document.getElementById('chatMessages');
+  const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message-item assistant';
+  messageDiv.id = messageId;
+
+  const avatar = '🤖';
+  messageDiv.innerHTML = `
+    <div class="message-avatar">${avatar}</div>
+    <div class="message-content">
+      <div class="message-text" id="${messageId}_text"></div>
+    </div>
+  `;
+
+  messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  const textElement = document.getElementById(`${messageId}_text`);
+  let currentText = '';
+
+  // 优化的逐字输出 - 按词组输出，提高速度
+  let i = 0;
+  while (i < fullContent.length) {
+    // 确定下一个输出块的大小
+    let chunkSize = 1;
+    const char = fullContent[i];
+
+    // 如果是中文字符，一次输出一个字符
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      chunkSize = 1;
+    }
+    // 如果是英文，一次输出一个单词
+    else if (/[a-zA-Z]/.test(char)) {
+      while (i + chunkSize < fullContent.length && /[a-zA-Z]/.test(fullContent[i + chunkSize])) {
+        chunkSize++;
+      }
+    }
+    // 如果是标点符号或空格，一次输出
+    else {
+      chunkSize = 1;
+    }
+
+    // 添加字符块到当前文本
+    const chunk = fullContent.substr(i, chunkSize);
+    currentText += chunk;
+
+    // 清理文本用于显示 - 移除JSON代码块和规范化换行符
+    let displayText = currentText;
+    // 移除JSON代码块（避免显示结构化数据）
+    displayText = displayText.replace(/```json[\s\S]*?```/g, '');
+    // 更激进的换行符处理：
+    // 1. 将多个连续换行符合并为单个换行符
+    displayText = displayText.replace(/\n{2,}/g, '\n');
+    // 2. 移除段落间多余的空行，只在标题和列表前保留换行
+    displayText = displayText.replace(/\n+(?=#{1,6}\s)/g, '\n'); // 标题前只保留一个换行
+    displayText = displayText.replace(/\n+(?=[-*]\s)/g, '\n');   // 列表前只保留一个换行
+    displayText = displayText.replace(/\n+(?=\d+\.\s)/g, '\n');  // 数字列表前只保留一个换行
+
+    // 实时渲染Markdown
+    const renderedHtml = parseMarkdown(displayText);
+    if (typeof renderedHtml === 'string') {
+      textElement.innerHTML = renderedHtml;
+    } else {
+      console.error('parseMarkdown返回非字符串:', typeof renderedHtml, renderedHtml);
+      textElement.innerHTML = String(renderedHtml || displayText);
+    }
+
+    // 滚动到底部
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    // 控制输出速度 - 更快的速度
+    const delay = char === '\n' ? 30 : (Math.random() * 15 + 5);
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    i += chunkSize;
+  }
+
+  // 输出完成后添加建议和结构化分点
+  setTimeout(() => {
+    addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId);
+  }, 500);
+
+  console.log('✅ 逐字输出完成');
+  return { content: fullContent, suggestions, structuredPoints };
+}
+
+// 添加建议和结构化分点
+function addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId) {
+  const messageContent = messageDiv.querySelector('.message-content');
+
+  // 添加建议
+  if (suggestions && suggestions.length > 0) {
+    const suggestionButtons = suggestions.map(s => {
+      const cleanText = s.text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`(.*?)`/g, '$1');
+      return `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${cleanText}', '${s.type || 'child'}')">${cleanText}</button>`;
+    }).join('');
+
+    const suggestionsHtml = `
+      <div class="suggestions">
+        <div class="suggestions-title">💡 AI建议</div>
+        <div class="suggestions-list">${suggestionButtons}</div>
+      </div>
+    `;
+    messageContent.insertAdjacentHTML('beforeend', suggestionsHtml);
+  }
+
+  // 添加结构化分点
+  if (structuredPoints && structuredPoints.length > 0) {
+    const pointsHtml = structuredPoints.map((point, index) => `
+      <div class="structured-point" data-point-id="${point.id || index}">
+        <div class="point-header">
+          <input type="checkbox" class="point-checkbox" id="point_${messageId}_${index}">
+          <label for="point_${messageId}_${index}" class="point-title">${point.title}</label>
+        </div>
+        <div class="point-content">${point.content}</div>
+        ${point.keywords ? `<div class="point-keywords">${point.keywords.map(k => `<span class="keyword">${k}</span>`).join('')}</div>` : ''}
+      </div>
+    `).join('');
+
+    const structuredPointsHtml = `
+      <div class="structured-points">
+        <div class="points-header">
+          <div class="points-title">📋 结构化分点</div>
+          <div class="points-actions">
+            <button class="select-all-btn" onclick="selectAllPoints('${messageId}')">全选</button>
+            <button class="add-selected-btn" onclick="addSelectedPoints('${messageId}')">添加选中</button>
+          </div>
+        </div>
+        <div class="points-list">${pointsHtml}</div>
+      </div>
+    `;
+    messageContent.insertAdjacentHTML('beforeend', structuredPointsHtml);
+  }
+
+  // 滚动到底部
+  const messagesContainer = document.getElementById('chatMessages');
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 轻量级实时Markdown解析器
+class StreamingMarkdownParser {
+  constructor() {
+    this.buffer = '';
+    this.inCodeBlock = false;
+    this.inList = false;
+    this.listLevel = 0;
+  }
+
+  // 实时解析Markdown内容
+  parseStreaming(content) {
+    const lines = content.split('\n');
+    let html = '';
+    let currentList = null;
+    let inCodeBlock = false;
+    let codeBlockType = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // 处理代码块
+      if (trimmed.startsWith('```')) {
+        if (!inCodeBlock) {
+          inCodeBlock = true;
+          codeBlockType = trimmed.substring(3);
+          html += `<div class="code-block" style="background: #f5f5f5; padding: 8px; margin: 4px 0; border-radius: 4px; font-family: monospace; font-size: 0.9em; line-height: 1.3;">`;
+          continue;
+        } else {
+          inCodeBlock = false;
+          html += '</div>';
+          continue;
+        }
+      }
+
+      if (inCodeBlock) {
+        html += this.escapeHtml(line) + '\n';
+        continue;
+      }
+
+      // 处理标题
+      if (trimmed.startsWith('# ')) {
+        html += `<h1 style="margin: 6px 0 3px 0; line-height: 1.2; font-size: 1.4em; font-weight: bold;">${this.parseInline(trimmed.substring(2))}</h1>`;
+      } else if (trimmed.startsWith('## ')) {
+        html += `<h2 style="margin: 5px 0 2px 0; line-height: 1.2; font-size: 1.3em; font-weight: bold;">${this.parseInline(trimmed.substring(3))}</h2>`;
+      } else if (trimmed.startsWith('### ')) {
+        html += `<h3 style="margin: 4px 0 2px 0; line-height: 1.2; font-size: 1.2em; font-weight: bold;">${this.parseInline(trimmed.substring(4))}</h3>`;
+      } else if (trimmed.startsWith('#### ')) {
+        html += `<h4 style="margin: 3px 0 1px 0; line-height: 1.2; font-size: 1.1em; font-weight: bold;">${this.parseInline(trimmed.substring(5))}</h4>`;
+      }
+      // 处理列表
+      else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        if (currentList !== 'ul') {
+          if (currentList) html += currentList === 'ol' ? '</ol>' : '</ul>';
+          html += '<ul style="margin: 2px 0; padding-left: 16px; line-height: 1.2;">';
+          currentList = 'ul';
+        }
+        html += `<li style="margin: 0; line-height: 1.2; padding: 1px 0;">${this.parseInline(trimmed.substring(2))}</li>`;
+      } else if (/^\d+\.\s/.test(trimmed)) {
+        if (currentList !== 'ol') {
+          if (currentList) html += currentList === 'ol' ? '</ol>' : '</ul>';
+          html += '<ol style="margin: 2px 0; padding-left: 16px; line-height: 1.2;">';
+          currentList = 'ol';
+        }
+        html += `<li style="margin: 0; line-height: 1.2; padding: 1px 0;">${this.parseInline(trimmed.replace(/^\d+\.\s/, ''))}</li>`;
+      }
+      // 处理普通段落
+      else if (trimmed.length > 0) {
+        if (currentList) {
+          html += currentList === 'ol' ? '</ol>' : '</ul>';
+          currentList = null;
+        }
+        html += `<div style="margin: 1px 0; line-height: 1.3;">${this.parseInline(trimmed)}</div>`;
+      }
+      // 处理空行
+      else {
+        if (currentList) {
+          html += currentList === 'ol' ? '</ol>' : '</ul>';
+          currentList = null;
+        }
+        // 空行只添加很小的间距
+        html += '<div style="height: 2px;"></div>';
+      }
+    }
+
+    // 关闭未关闭的列表
+    if (currentList) {
+      html += currentList === 'ol' ? '</ol>' : '</ul>';
+    }
+
+    return html;
+  }
+
+  // 解析行内元素
+  parseInline(text) {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/`(.*?)`/g, '<code style="background: #f0f0f0; padding: 1px 3px; border-radius: 2px; font-family: monospace; font-size: 0.9em;">$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #409eff; text-decoration: none;">$1</a>');
+  }
+
+  // HTML转义
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}
+
+// 创建解析器实例
+const streamingParser = new StreamingMarkdownParser();
+
+// 初始化marked.js配置 - 使用简单配置，参考demo_markdown_parser.html
+if (typeof marked !== 'undefined') {
+  // 配置marked选项 - 保持简单
+  marked.setOptions({
+    breaks: true,        // 支持换行
+    gfm: true,          // 支持GitHub风格Markdown
+    sanitize: false,    // 不过滤HTML
+    smartLists: true,   // 智能列表
+    smartypants: false  // 不转换引号
+  });
+
+  console.log('marked.js配置完成');
+}
+
+// 使用marked.js的Markdown解析函数 - 参考demo_markdown_parser.html的简单用法
+function parseMarkdown(content) {
+  // 确保content是字符串
+  if (typeof content !== 'string') {
+    console.warn('parseMarkdown接收到非字符串内容:', typeof content, content);
+    return String(content || '');
+  }
+
+  // 检查marked.js是否可用
+  if (typeof marked === 'undefined') {
+    console.warn('marked.js未加载，使用降级解析');
+    return fallbackParseMarkdown(content);
+  }
+
+  try {
+    // 更激进的预处理：彻底清理空白
+    let preprocessedContent = content
+      // 移除所有连续的空白行，只保留单个换行
+      .replace(/\n\s*\n/g, '\n')
+      // 移除行首行尾的所有空白字符
+      .replace(/^[ \t\r\f\v]+|[ \t\r\f\v]+$/gm, '')
+      // 移除完全空白的行
+      .replace(/^\s*$/gm, '')
+      // 将多个连续换行压缩为单个换行
+      .replace(/\n+/g, '\n')
+      // 移除开头和结尾的换行符
+      .trim();
+
+    // 使用简单的marked.parse，就像demo中一样
+    let html = marked.parse(preprocessedContent);
+
+    // 确保返回值是字符串
+    if (typeof html !== 'string') {
+      console.warn('marked.parse返回非字符串:', typeof html, html);
+      return fallbackParseMarkdown(content);
+    }
+
+    // 更彻底的HTML清理
+    html = html
+      // 移除所有空的段落标签
+      .replace(/<p>\s*<\/p>/g, '')
+      .replace(/<p>[\s\u00A0\u200B]*<\/p>/g, '')
+      // 移除空的div和其他容器
+      .replace(/<div>\s*<\/div>/g, '')
+      .replace(/<span>\s*<\/span>/g, '')
+      // 移除HTML中的多余换行和空白
+      .replace(/>\s+</g, '><')
+      .replace(/\n\s*\n/g, '\n')
+      // 压缩所有连续的空白字符
+      .replace(/\s{2,}/g, ' ')
+      // 移除标签间的换行符
+      .replace(/>\n+</g, '><');
+
+    // 应用超级紧凑的样式 - 几乎无间距
+    html = html
+      .replace(/<h([1-6])>/g, '<h$1 style="margin: 1px 0 0 0; line-height: 1.0; font-weight: 600; display: inline-block; width: 100%;">')
+      .replace(/<p>/g, '<p style="margin: 0; line-height: 1.1; display: inline-block; width: 100%;">')
+      .replace(/<ul>/g, '<ul style="margin: 0; padding-left: 12px; line-height: 1.0;">')
+      .replace(/<ol>/g, '<ol style="margin: 0; padding-left: 12px; line-height: 1.0;">')
+      .replace(/<li>/g, '<li style="margin: 0; line-height: 1.0; padding: 0; display: list-item;">')
+      .replace(/<strong>/g, '<strong style="font-weight: 600;">')
+      .replace(/<em>/g, '<em style="font-style: italic;">')
+      .replace(/<code>/g, '<code style="background: #f0f0f0; padding: 1px 3px; border-radius: 2px; font-family: monospace; font-size: 0.9em;">');
+
+    return html;
+  } catch (error) {
+    console.warn('marked.js解析失败:', error);
+    return fallbackParseMarkdown(content);
+  }
+}
+
+// 降级Markdown解析函数
+function fallbackParseMarkdown(content) {
+  // 确保content是字符串
+  if (typeof content !== 'string') {
+    console.warn('fallbackParseMarkdown接收到非字符串内容:', typeof content, content);
+    return String(content || '');
+  }
+
+  return content
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 600;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em style="font-style: italic;">$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background: #f0f0f0; padding: 1px 3px; border-radius: 2px; font-family: monospace; font-size: 0.9em;">$1</code>')
+    .replace(/^### (.*$)/gim, '<h3 style="margin: 1px 0 1px 0; line-height: 1.1; font-size: 1.1em; font-weight: bold;">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 style="margin: 2px 0 1px 0; line-height: 1.1; font-size: 1.2em; font-weight: bold;">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 style="margin: 2px 0 1px 0; line-height: 1.1; font-size: 1.3em; font-weight: bold;">$1</h1>')
+    .replace(/^- (.*$)/gim, '<li style="margin: 0; line-height: 1.1; padding: 0;">$1</li>')
+    .replace(/(<li.*?<\/li>)/gs, '<ul style="margin: 0; padding-left: 14px; line-height: 1.1;">$1</ul>');
+}
+
+// 改进的AI建议提取逻辑
 function extractSuggestions(content) {
   const suggestions = [];
+
+  // 首先尝试从结构化JSON中提取（这是我们推荐的方式）
+  const structuredPoints = parseStructuredPoints(content);
+  if (structuredPoints.length > 0) {
+    // 从结构化分点中提取前3个作为快速建议
+    structuredPoints.slice(0, 3).forEach(point => {
+      if (point.title && point.title.length <= 50) {
+        suggestions.push({
+          text: point.title,
+          type: 'child',
+          description: point.content || '来自结构化分点'
+        });
+      }
+    });
+    return suggestions;
+  }
+
+  // 如果没有结构化分点，则从Markdown列表中提取
   const lines = content.split('\n');
+  let inCodeBlock = false;
 
   lines.forEach(line => {
     const trimmed = line.trim();
-    if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
-      const text = trimmed.substring(2).trim();
-      if (text.length > 0 && text.length < 50) {
+
+    // 跳过代码块内容
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      return;
+    }
+    if (inCodeBlock) return;
+
+    // 提取列表项，但排除一些明显不适合作为节点的内容
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.match(/^\d+\.\s/)) {
+      let text = trimmed.replace(/^[-•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+
+      // 过滤条件：
+      // 1. 长度在3-50字符之间
+      // 2. 不包含特殊标记（如JSON、代码等）
+      // 3. 不是纯数字或特殊符号
+      if (text.length >= 3 && text.length <= 50 &&
+          !text.includes('{') && !text.includes('}') &&
+          !text.includes('```') && !text.includes('json') &&
+          !/^[\d\s\-_=]+$/.test(text)) {
+
         suggestions.push({
           text,
-          type: 'child'
+          type: 'child',
+          description: '来自AI回复列表'
         });
       }
     }
@@ -2107,9 +2779,11 @@ function addMessage(role, content, suggestions = [], structuredPoints = []) {
   // 普通建议HTML
   let suggestionsHtml = '';
   if (suggestions && suggestions.length > 0) {
-    const suggestionButtons = suggestions.map(s =>
-      `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${s.text}', '${s.type || 'child'}')">${s.text}</button>`
-    ).join('');
+    const suggestionButtons = suggestions.map(s => {
+      // 清理建议文本中的Markdown符号
+      const cleanText = s.text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`(.*?)`/g, '$1');
+      return `<button class="suggestion-btn" onclick="addSuggestionToMindMap('${cleanText}', '${s.type || 'child'}')">${cleanText}</button>`;
+    }).join('');
 
     suggestionsHtml = `
       <div class="suggestions">
@@ -2147,10 +2821,13 @@ function addMessage(role, content, suggestions = [], structuredPoints = []) {
     `;
   }
 
+  // 对AI回复进行Markdown解析
+  const processedContent = role === 'assistant' ? parseMarkdown(content) : content;
+
   messageDiv.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message-content">
-      <div class="message-text">${content}</div>
+      <div class="message-text">${processedContent}</div>
       ${suggestionsHtml}
       ${structuredPointsHtml}
     </div>
@@ -2554,6 +3231,7 @@ function showConfig() {
   document.getElementById('apiKey').value = aiConfig.apiKey;
   document.getElementById('aiModel').value = aiConfig.model;
   document.getElementById('baseURL').value = aiConfig.baseURL;
+  document.getElementById('customPrompt').value = aiConfig.customPrompt || '';
 }
 
 // 关闭配置
@@ -2567,6 +3245,7 @@ function saveConfig() {
   aiConfig.apiKey = document.getElementById('apiKey').value;
   aiConfig.model = document.getElementById('aiModel').value;
   aiConfig.baseURL = document.getElementById('baseURL').value;
+  aiConfig.customPrompt = document.getElementById('customPrompt').value;
 
   // 保存到本地存储
   localStorage.setItem('ai_config', JSON.stringify(aiConfig));
@@ -2600,6 +3279,101 @@ async function testConnection() {
   } catch (error) {
     alert('连接测试失败：' + error.message);
   }
+}
+
+// 预览完整提示词
+function previewFullPrompt() {
+  const customPrompt = document.getElementById('customPrompt').value;
+
+  // 构建完整提示词
+  let fullPrompt = '';
+
+  if (customPrompt && customPrompt.trim()) {
+    fullPrompt = customPrompt.trim();
+  } else {
+    fullPrompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
+
+核心能力：
+1. 分析思维导图节点内容
+2. 提供相关的子节点建议
+3. 回答与节点内容相关的问题
+4. 帮助用户理清思路和逻辑关系
+
+回复要求：
+- 首先提供一个简洁的总体回答（100-200字）
+- 然后提供结构化的分点供用户选择添加到思维导图
+- 保持逻辑性和条理性`;
+  }
+
+  // 添加固定的JSON格式要求
+  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
+
+  fullPrompt += `
+
+重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：
+${jsonExample}`;
+
+  // 显示预览对话框
+  const previewWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+  previewWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>完整系统提示词预览</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          line-height: 1.6;
+          margin: 20px;
+          background: #f8f9fa;
+        }
+        .container {
+          max-width: 800px;
+          margin: 0 auto;
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+          color: #333;
+          border-bottom: 2px solid #409eff;
+          padding-bottom: 10px;
+        }
+        .prompt-content {
+          background: #f8f9fa;
+          padding: 15px;
+          border-radius: 6px;
+          border: 1px solid #e8e8e8;
+          white-space: pre-wrap;
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          font-size: 13px;
+          line-height: 1.5;
+          max-height: 500px;
+          overflow-y: auto;
+        }
+        .note {
+          background: #e8f4fd;
+          color: #409eff;
+          padding: 10px;
+          border-radius: 6px;
+          margin-top: 15px;
+          font-size: 14px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>🤖 完整系统提示词预览</h1>
+        <div class="prompt-content">${fullPrompt.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+        <div class="note">
+          <strong>说明：</strong>这是AI助手将收到的完整系统提示词，包含您的自定义内容和系统自动添加的JSON格式要求。
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  previewWindow.document.close();
 }
 
 // 处理键盘事件

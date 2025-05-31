@@ -19,7 +19,8 @@ export const DEFAULT_AI_CONFIG = {
   model: 'gpt-3.5-turbo',
   timeout: 30000,
   maxRetries: 3,
-  debugMode: false
+  debugMode: false,
+  customPrompt: '' // 用户自定义提示词
 }
 
 // 思维导图AI配置
@@ -135,6 +136,51 @@ export function getMindMapAIConfig() {
     console.error('获取思维导图AI配置失败:', error)
     return DEFAULT_MINDMAP_AI_CONFIG
   }
+}
+
+// 获取固定的JSON格式要求提示词
+export function getFixedJSONPrompt() {
+  return `
+
+重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：
+\`\`\`json
+{
+  "structuredPoints": [
+    {
+      "id": "point_1",
+      "title": "概括性标题",
+      "content": "详细解释内容",
+      "keywords": ["关键词1", "关键词2"]
+    }
+  ]
+}
+\`\`\``
+}
+
+// 构建完整的系统提示词（用户自定义 + 固定JSON要求）
+export function buildSystemPrompt(customPrompt = '') {
+  // 获取当前AI配置中的自定义提示词
+  const config = getCurrentAIConfig()
+  const userPrompt = customPrompt || config.customPrompt || ''
+
+  // 如果用户没有自定义提示词，使用默认提示词
+  const defaultPrompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
+
+核心能力：
+1. 分析思维导图节点内容
+2. 提供相关的子节点建议
+3. 回答与节点内容相关的问题
+4. 帮助用户理清思路和逻辑关系
+
+回复要求：
+- 首先提供一个简洁的总体回答（100-200字）
+- 然后提供结构化的分点供用户选择添加到思维导图
+- 保持逻辑性和条理性`
+
+  const basePrompt = userPrompt.trim() || defaultPrompt
+  const fixedPrompt = getFixedJSONPrompt()
+
+  return basePrompt + fixedPrompt
 }
 
 // 保存思维导图AI配置

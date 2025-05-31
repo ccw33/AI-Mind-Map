@@ -99,6 +99,29 @@
               <div class="form-tip">开启后会在控制台输出调试信息</div>
             </el-form-item>
           </el-collapse-item>
+
+          <el-collapse-item title="提示词配置" name="prompt">
+            <el-form-item label="自定义提示词" prop="customPrompt">
+              <el-input
+                v-model="ruleForm.customPrompt"
+                type="textarea"
+                :rows="8"
+                placeholder="请输入自定义系统提示词（可选）"
+                style="width: 100%"
+              />
+              <div class="form-tip">
+                <div>自定义AI助手的行为和回复风格。留空则使用默认提示词。</div>
+                <div style="margin-top: 8px; color: #409eff;">
+                  <strong>注意：</strong>系统会自动在您的提示词末尾添加JSON格式要求，确保AI回复包含结构化分点。
+                </div>
+              </div>
+            </el-form-item>
+
+            <div class="prompt-actions">
+              <el-button size="small" @click="resetPrompt">重置为默认</el-button>
+              <el-button size="small" type="primary" @click="previewPrompt">预览完整提示词</el-button>
+            </div>
+          </el-collapse-item>
         </el-collapse>
       </el-form>
     </div>
@@ -120,7 +143,8 @@ import {
   validateAIConfig,
   getProviderConfig,
   AI_PROVIDERS,
-  DEFAULT_AI_CONFIG
+  DEFAULT_AI_CONFIG,
+  buildSystemPrompt
 } from '@/lib/ai-config.js'
 import { updateAIConfig } from '@/lib/ai-service.js'
 
@@ -146,7 +170,8 @@ export default {
         baseURL: '',
         model: '',
         timeout: 30000,
-        debugMode: false
+        debugMode: false,
+        customPrompt: ''
       },
       rules: {
         provider: [
@@ -282,6 +307,31 @@ export default {
           this.saving = false
         }
       })
+    },
+
+    // 重置提示词为默认
+    resetPrompt() {
+      this.$confirm('确定要重置提示词为默认设置吗？', '确认重置', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        this.ruleForm.customPrompt = ''
+        this.$message.success('提示词已重置为默认')
+      }).catch(() => {
+        // 用户取消
+      })
+    },
+
+    // 预览完整提示词
+    previewPrompt() {
+      const fullPrompt = buildSystemPrompt(this.ruleForm.customPrompt)
+
+      this.$alert(fullPrompt, '完整系统提示词预览', {
+        confirmButtonText: '确定',
+        customClass: 'prompt-preview-dialog',
+        dangerouslyUseHTMLString: false
+      })
     }
   }
 }
@@ -341,6 +391,36 @@ export default {
         text-align: left;
       }
     }
+
+    .prompt-actions {
+      margin-top: 12px;
+      text-align: right;
+
+      .el-button {
+        margin-left: 8px;
+      }
+    }
+  }
+}
+
+// 全局样式：提示词预览对话框
+/deep/ .prompt-preview-dialog {
+  .el-message-box__content {
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid #e8e8e8;
+  }
+
+  .el-message-box {
+    width: 600px;
+    max-width: 90vw;
   }
 }
 </style>
