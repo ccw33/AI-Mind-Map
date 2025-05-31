@@ -2624,54 +2624,15 @@ function parseMarkdown(content) {
   }
 
   try {
-    // 更激进的预处理：彻底清理空白
-    let preprocessedContent = content
-      // 移除所有连续的空白行，只保留单个换行
-      .replace(/\n\s*\n/g, '\n')
-      // 移除行首行尾的所有空白字符
-      .replace(/^[ \t\r\f\v]+|[ \t\r\f\v]+$/gm, '')
-      // 移除完全空白的行
-      .replace(/^\s*$/gm, '')
-      // 将多个连续换行压缩为单个换行
-      .replace(/\n+/g, '\n')
-      // 移除开头和结尾的换行符
-      .trim();
 
     // 使用简单的marked.parse，就像demo中一样
-    let html = marked.parse(preprocessedContent);
+    let html = marked.parse(content);
 
     // 确保返回值是字符串
     if (typeof html !== 'string') {
       console.warn('marked.parse返回非字符串:', typeof html, html);
       return fallbackParseMarkdown(content);
     }
-
-    // 更彻底的HTML清理
-    html = html
-      // 移除所有空的段落标签
-      .replace(/<p>\s*<\/p>/g, '')
-      .replace(/<p>[\s\u00A0\u200B]*<\/p>/g, '')
-      // 移除空的div和其他容器
-      .replace(/<div>\s*<\/div>/g, '')
-      .replace(/<span>\s*<\/span>/g, '')
-      // 移除HTML中的多余换行和空白
-      .replace(/>\s+</g, '><')
-      .replace(/\n\s*\n/g, '\n')
-      // 压缩所有连续的空白字符
-      .replace(/\s{2,}/g, ' ')
-      // 移除标签间的换行符
-      .replace(/>\n+</g, '><');
-
-    // 应用舒适的样式 - 参考标准文档间距
-    html = html
-      .replace(/<h([1-6])>/g, '<h$1 style="margin: 16px 0 8px 0; line-height: 1.4; font-weight: 600;">')
-      .replace(/<p>/g, '<p style="margin: 8px 0; line-height: 1.5;">')
-      .replace(/<ul>/g, '<ul style="margin: 8px 0; padding-left: 20px; line-height: 1.4;">')
-      .replace(/<ol>/g, '<ol style="margin: 8px 0; padding-left: 20px; line-height: 1.4;">')
-      .replace(/<li>/g, '<li style="margin: 4px 0; line-height: 1.4; padding: 0;">')
-      .replace(/<strong>/g, '<strong style="font-weight: 600;">')
-      .replace(/<em>/g, '<em style="font-style: italic;">')
-      .replace(/<code>/g, '<code style="background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 0.9em;">');
 
     return html;
   } catch (error) {
