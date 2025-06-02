@@ -1037,6 +1037,113 @@ let aiConfig = {
   customPrompt: ''
 };
 
+// 抽取的提示词常量
+const AI_PROMPTS = {
+  // 默认系统提示词
+  DEFAULT_SYSTEM_PROMPT: `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
+
+核心能力：
+1. 分析思维导图节点内容
+2. 提供相关的子节点建议
+3. 回答与节点内容相关的问题
+4. 帮助用户理清思路和逻辑关系
+
+回复要求：
+- 首先提供一个简洁的总体回答（100-200字）
+- 然后提供结构化的分点供用户选择添加到思维导图
+- 保持逻辑性和条理性`,
+
+  // JSON格式示例
+  JSON_EXAMPLE: `\`\`\`json
+{
+  "structuredPoints": [
+    {
+      "id": "point_1",
+      "title": "概括性标题",
+      "content": "详细解释内容",
+      "keywords": ["关键词1", "关键词2"]
+    }
+  ]
+}
+\`\`\``,
+
+  // JSON格式要求说明
+  JSON_FORMAT_INSTRUCTION: `重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：`
+};
+
+// 构建完整系统提示词的辅助函数
+function buildFullSystemPrompt(customPrompt = '') {
+  // 构建基础提示词
+  let prompt = '';
+
+  if (customPrompt && customPrompt.trim()) {
+    // 使用用户自定义提示词
+    prompt = customPrompt.trim();
+  } else {
+    // 使用默认提示词
+    prompt = AI_PROMPTS.DEFAULT_SYSTEM_PROMPT;
+  }
+
+  // 添加固定的JSON格式要求
+  prompt += `
+
+${AI_PROMPTS.JSON_FORMAT_INSTRUCTION}
+${AI_PROMPTS.JSON_EXAMPLE}`;
+
+  return prompt;
+};
+
+// 通用工具函数
+const Utils = {
+  // 从节点获取文本内容
+  getNodeText(node) {
+    if (!node) return '';
+
+    let rawText = '';
+    if (node.nodeData && node.nodeData.data) {
+      rawText = node.nodeData.data.text || '';
+    } else if (node.getData) {
+      rawText = node.getData('text') || '';
+    }
+
+    return this.cleanHtmlText(rawText);
+  },
+
+  // 从节点获取备注内容
+  getNodeNote(node) {
+    if (!node) return '';
+
+    let note = '';
+    if (node.nodeData && node.nodeData.data) {
+      note = node.nodeData.data.note || '';
+    } else if (node.getData) {
+      note = node.getData('note') || '';
+    }
+
+    return note;
+  },
+
+  // 清理HTML标签，只保留纯文本
+  cleanHtmlText(rawText) {
+    if (typeof rawText === 'string') {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = rawText;
+      return tempDiv.textContent || tempDiv.innerText || rawText;
+    } else {
+      return String(rawText || '');
+    }
+  },
+
+  // 设置思维导图实例到全局
+  setMindMapInstance(instance) {
+    mindMapInstance = instance;
+    window.mindMapInstance = instance;
+    if (window.debugMode) {
+      console.log('思维导图实例已设置到全局:', instance);
+    }
+  }
+};
+
 // 初始化AI聊天功能
 function initAIChat() {
   // 显示AI聊天浮窗
@@ -1076,8 +1183,7 @@ function initAIChat() {
   if (window.$bus) {
     window.$bus.$on('app_inited', (mindMap) => {
       console.log('思维导图初始化完成:', mindMap);
-      mindMapInstance = mindMap;
-      window.mindMapInstance = mindMapInstance; // 确保设置到全局
+      Utils.setMindMapInstance(mindMap);
       bindMindMapEvents(mindMap);
     });
   }
@@ -1087,16 +1193,14 @@ function initAIChat() {
     // 方法1: 检查全局变量
     if (window.mindMap && !mindMapInstance) {
       console.log('从全局获取思维导图实例:', window.mindMap);
-      mindMapInstance = window.mindMap;
-      window.mindMapInstance = mindMapInstance; // 确保设置到全局
+      Utils.setMindMapInstance(window.mindMap);
       bindMindMapEvents(mindMapInstance);
       return true;
     }
 
     if (window.app && window.app.mindMap && !mindMapInstance) {
       console.log('从app获取思维导图实例:', window.app.mindMap);
-      mindMapInstance = window.app.mindMap;
-      window.mindMapInstance = mindMapInstance; // 确保设置到全局
+      Utils.setMindMapInstance(window.app.mindMap);
       bindMindMapEvents(mindMapInstance);
       return true;
     }
@@ -1111,8 +1215,7 @@ function initAIChat() {
         for (let child of vueInstance.$children) {
           if (child.mindMap && !mindMapInstance) {
             console.log('从Vue子组件获取思维导图实例:', child.mindMap);
-            mindMapInstance = child.mindMap;
-            window.mindMapInstance = mindMapInstance; // 确保设置到全局
+            Utils.setMindMapInstance(child.mindMap);
             bindMindMapEvents(mindMapInstance);
             return true;
           }
@@ -1122,8 +1225,7 @@ function initAIChat() {
             for (let grandChild of child.$children) {
               if (grandChild.mindMap && !mindMapInstance) {
                 console.log('从Vue孙组件获取思维导图实例:', grandChild.mindMap);
-                mindMapInstance = grandChild.mindMap;
-                window.mindMapInstance = mindMapInstance; // 确保设置到全局
+                Utils.setMindMapInstance(grandChild.mindMap);
                 bindMindMapEvents(mindMapInstance);
                 return true;
               }
@@ -1182,8 +1284,7 @@ function initAIChat() {
       const foundMindMap = findMindMapInVueTree(vueInstance);
       if (foundMindMap) {
         console.log('通过递归搜索找到思维导图实例:', foundMindMap);
-        mindMapInstance = foundMindMap;
-        window.mindMapInstance = mindMapInstance; // 确保设置到全局
+        Utils.setMindMapInstance(foundMindMap);
         bindMindMapEvents(mindMapInstance);
 
         // 立即尝试同步当前激活节点
@@ -1246,26 +1347,15 @@ function bindMindMapEvents(mindMap) {
         const activeNodes = mindMap.renderer.activeNodeList;
         if (activeNodes.length > 0) {
           const currentActiveNode = activeNodes[0];
-          let currentRawText = currentActiveNode.nodeData ?
-            currentActiveNode.nodeData.data.text :
-            (currentActiveNode.getData ? currentActiveNode.getData('text') : '');
 
-          // 清理HTML标签，获取纯文本用于比较
-          let currentCleanText = '';
-          if (typeof currentRawText === 'string') {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = currentRawText;
-            currentCleanText = tempDiv.textContent || tempDiv.innerText || currentRawText;
-          } else {
-            // 确保currentCleanText始终是字符串
-            currentCleanText = String(currentRawText || '');
-          }
+          // 使用工具函数获取清理后的节点文本
+          const currentCleanText = Utils.getNodeText(currentActiveNode);
 
           // 如果当前激活节点与记录的不同，更新选中节点
           if (currentCleanText && currentCleanText !== selectedNodeText) {
             // 只在调试模式下输出详细信息
             if (window.debugMode) {
-              console.log('检测到新的激活节点:', currentRawText, '-> 清理后:', currentCleanText);
+              console.log('检测到新的激活节点:', currentCleanText);
             }
             updateSelectedNode(currentActiveNode);
           }
@@ -1290,19 +1380,8 @@ function updateSelectedNode(node) {
   }
 
   try {
-    // 正确获取节点文本 - 参考ai-mind-map的实现
-    let rawText = node.nodeData ? node.nodeData.data.text : (node.getData ? node.getData('text') : '');
-
-    // 清理HTML标签，只保留纯文本
-    if (typeof rawText === 'string') {
-      // 创建临时DOM元素来解析HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = rawText;
-      selectedNodeText = tempDiv.textContent || tempDiv.innerText || rawText;
-    } else {
-      // 确保selectedNodeText始终是字符串
-      selectedNodeText = String(rawText || '');
-    }
+    // 使用工具函数获取节点文本
+    selectedNodeText = Utils.getNodeText(node);
 
     selectedNodeHierarchy = getNodeHierarchy(node);
     updateContextInfo();
@@ -1332,24 +1411,8 @@ function getNodeHierarchy(node) {
 
   while (currentNode) {
     try {
-      // 正确获取节点文本 - 兼容不同的节点数据结构
-      let rawText = '';
-      if (currentNode.nodeData && currentNode.nodeData.data) {
-        rawText = currentNode.nodeData.data.text || '';
-      } else if (currentNode.getData) {
-        rawText = currentNode.getData('text') || '';
-      }
-
-      // 清理HTML标签，只保留纯文本
-      let text = '';
-      if (typeof rawText === 'string') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = rawText;
-        text = tempDiv.textContent || tempDiv.innerText || rawText;
-      } else {
-        // 确保text始终是字符串
-        text = String(rawText || '');
-      }
+      // 使用工具函数获取节点文本
+      const text = Utils.getNodeText(currentNode);
 
       if (text) {
         hierarchy.unshift(text);
@@ -1371,32 +1434,9 @@ function getNodeHierarchyWithNotes(node) {
 
   while (currentNode) {
     try {
-      // 获取节点文本
-      let rawText = '';
-      if (currentNode.nodeData && currentNode.nodeData.data) {
-        rawText = currentNode.nodeData.data.text || '';
-      } else if (currentNode.getData) {
-        rawText = currentNode.getData('text') || '';
-      }
-
-      // 清理HTML标签，只保留纯文本
-      let text = '';
-      if (typeof rawText === 'string') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = rawText;
-        text = tempDiv.textContent || tempDiv.innerText || rawText;
-      } else {
-        // 确保text始终是字符串
-        text = String(rawText || '');
-      }
-
-      // 获取节点备注
-      let note = '';
-      if (currentNode.nodeData && currentNode.nodeData.data) {
-        note = currentNode.nodeData.data.note || '';
-      } else if (currentNode.getData) {
-        note = currentNode.getData('note') || '';
-      }
+      // 使用工具函数获取节点文本和备注
+      const text = Utils.getNodeText(currentNode);
+      const note = Utils.getNodeNote(currentNode);
 
       if (text) {
         hierarchyWithNotes.unshift({
@@ -1961,35 +2001,8 @@ function getSystemPrompt() {
   // 获取用户自定义提示词（从localStorage）
   const customPrompt = getCustomPromptFromStorage();
 
-  // 构建基础提示词
-  let prompt = '';
-
-  if (customPrompt && customPrompt.trim()) {
-    // 使用用户自定义提示词
-    prompt = customPrompt.trim();
-  } else {
-    // 使用默认提示词
-    prompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
-
-核心能力：
-1. 分析思维导图节点内容
-2. 提供相关的子节点建议
-3. 回答与节点内容相关的问题
-4. 帮助用户理清思路和逻辑关系
-
-回复要求：
-- 首先提供一个简洁的总体回答（100-200字）
-- 然后提供结构化的分点供用户选择添加到思维导图
-- 保持逻辑性和条理性`;
-  }
-
-  // 添加固定的JSON格式要求
-  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
-
-  prompt += `
-
-重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：
-${jsonExample}`;
+  // 使用辅助函数构建基础提示词
+  let prompt = buildFullSystemPrompt(customPrompt);
 
   // 获取当前选中节点的详细上下文信息
   if (selectedNodeText && selectedNodeHierarchy.length > 0) {
@@ -3239,20 +3252,8 @@ function syncCurrentActiveNode() {
       console.log('手动同步激活节点:', currentActiveNode);
       updateSelectedNode(currentActiveNode);
 
-      // 获取节点文本用于通知
-      let rawNodeText = currentActiveNode.nodeData ?
-        currentActiveNode.nodeData.data.text :
-        (currentActiveNode.getData ? currentActiveNode.getData('text') : '未知节点');
-
-      // 清理HTML标签
-      let nodeText = '';
-      if (typeof rawNodeText === 'string') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = rawNodeText;
-        nodeText = tempDiv.textContent || tempDiv.innerText || rawNodeText;
-      } else {
-        nodeText = rawNodeText || '未知节点';
-      }
+      // 使用工具函数获取节点文本用于通知
+      const nodeText = Utils.getNodeText(currentActiveNode) || '未知节点';
 
       showNotification(`✅ 已同步节点: ${nodeText}`, 'success');
       return true;
@@ -3561,33 +3562,8 @@ async function testConnection() {
 function previewFullPrompt() {
   const customPrompt = document.getElementById('customPrompt').value;
 
-  // 构建完整提示词
-  let fullPrompt = '';
-
-  if (customPrompt && customPrompt.trim()) {
-    fullPrompt = customPrompt.trim();
-  } else {
-    fullPrompt = `你是一个专业的思维导图AI助手。你的任务是帮助用户扩展和完善思维导图。
-
-核心能力：
-1. 分析思维导图节点内容
-2. 提供相关的子节点建议
-3. 回答与节点内容相关的问题
-4. 帮助用户理清思路和逻辑关系
-
-回复要求：
-- 首先提供一个简洁的总体回答（100-200字）
-- 然后提供结构化的分点供用户选择添加到思维导图
-- 保持逻辑性和条理性`;
-  }
-
-  // 添加固定的JSON格式要求
-  const jsonExample = '```json\n{\n  "structuredPoints": [\n    {\n      "id": "point_1",\n      "title": "概括性标题",\n      "content": "详细解释内容",\n      "keywords": ["关键词1", "关键词2"]\n    }\n  ]\n}\n```';
-
-  fullPrompt += `
-
-重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：
-${jsonExample}`;
+  // 使用辅助函数构建完整提示词
+  const fullPrompt = buildFullSystemPrompt(customPrompt);
 
   // 显示预览对话框
   const previewWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
