@@ -16,6 +16,9 @@
 
 <!-- AI聊天浮窗 -->
 <div id="aiChatBot" class="ai-chat-bot" style="display: none;">
+  <!-- 边缘标签，用于最小化时显示 -->
+  <div class="edge-label" onclick="toggleMinimize()">AI助手</div>
+
   <div class="chat-header" onclick="toggleMinimize()">
     <div class="header-left">
       <span class="ai-icon">🤖</span>
@@ -139,6 +142,17 @@
     height: 50px;
     max-height: 50px;
     min-height: 50px;
+    /* 移动端保持原有行为，不收缩到边缘 */
+    right: 10px !important;
+    width: calc(100vw - 20px) !important;
+    /* 重置桌面端的边缘收缩样式 */
+    left: 10px !important;
+    bottom: 10px !important;
+  }
+
+  /* 移动端不显示边缘标签 */
+  .ai-chat-bot.minimized::before {
+    display: none;
   }
 }
 
@@ -160,15 +174,70 @@
     max-height: 60px;
     min-height: 60px;
     top: auto;
-    bottom: 0;
+    bottom: 0 !important;
+    /* 小屏幕设备保持原有行为 */
+    right: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+  }
+
+  /* 小屏幕设备不显示边缘标签 */
+  .ai-chat-bot.minimized::before {
+    display: none;
   }
 }
 
-.ai-chat-bot.minimized {
-  max-height: 50px;
-  min-height: 50px;
-  height: 50px;
-  resize: none;
+/* 最小化状态 - 智能避让工具栏 - 仅适用于桌面端 */
+@media (min-width: 769px) {
+  .ai-chat-bot.minimized {
+    max-height: 50px !important;
+    min-height: 50px !important;
+    height: 50px !important;
+    resize: none !important;
+    /* 最小化时收缩到边缘，避免遮挡工具栏 */
+    right: -280px !important; /* 大部分隐藏到屏幕外 */
+    bottom: 120px !important; /* 提高底部位置，避开底部工具栏和上方工具栏 */
+    left: auto !important; /* 重置left */
+    top: auto !important; /* 重置top */
+    width: 320px !important; /* 固定宽度，便于计算 */
+    transition: all 0.3s ease !important;
+  }
+
+  /* 最小化时的悬浮显示效果 */
+  .ai-chat-bot.minimized:hover {
+    right: 20px !important; /* 悬浮时完全显示 */
+  }
+}
+
+/* 最小化时显示的边缘标签 - 使用真实元素而非伪元素 */
+.ai-chat-bot.minimized .edge-label {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #409eff;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  z-index: 1;
+}
+
+/* 边缘标签悬浮效果 */
+.ai-chat-bot.minimized .edge-label:hover {
+  background: #337ecc;
+  transform: translateY(-50%) scale(1.05);
+}
+
+/* 非最小化状态隐藏边缘标签 */
+.ai-chat-bot:not(.minimized) .edge-label {
+  display: none;
 }
 
 .ai-chat-bot.minimized .chat-messages,
@@ -352,6 +421,8 @@
   line-height: 1.5;
   word-wrap: break-word;
   /* white-space: pre-wrap */
+  margin-bottom: 1em;
+  margin-top: 1em;
 }
 
 /* Markdown样式 */
@@ -1019,6 +1090,79 @@
     transform: translateY(0);
   }
 }
+
+/* 移动端样式覆盖 - 确保最高优先级 */
+@media (max-width: 768px) {
+  /* 非最小化状态：正常展开 */
+  .ai-chat-bot:not(.minimized) {
+    width: calc(100vw - 20px) !important;
+    height: 95vh !important;
+    max-height: 95vh !important;
+    bottom: 10px !important;
+    right: 10px !important;
+    left: 10px !important;
+    top: auto !important;
+    position: fixed !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  /* 最小化状态：边缘收缩 */
+  .ai-chat-bot.minimized {
+    position: fixed !important;
+    right: -250px !important; /* 强制覆盖 */
+    width: 280px !important;
+    bottom: 80px !important;
+    left: auto !important; /* 重置left属性 */
+    top: auto !important; /* 重置top属性 */
+    height: 50px !important;
+    max-height: 50px !important;
+    min-height: 50px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .ai-chat-bot.minimized:hover {
+    right: 10px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 非最小化状态：全屏展开 */
+  .ai-chat-bot:not(.minimized) {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    top: 0 !important;
+    position: fixed !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  /* 最小化状态：边缘收缩 */
+  .ai-chat-bot.minimized {
+    position: fixed !important;
+    right: -220px !important; /* 强制覆盖 */
+    width: 250px !important;
+    bottom: 60px !important;
+    left: auto !important; /* 重置left属性 */
+    top: auto !important; /* 重置top属性 */
+    height: 60px !important;
+    max-height: 60px !important;
+    min-height: 60px !important;
+    border-radius: 8px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .ai-chat-bot.minimized:hover {
+    right: 0 !important;
+  }
+}
 </style>
 
 <script>
@@ -1058,7 +1202,6 @@ const AI_PROMPTS = {
 {
   "structuredPoints": [
     {
-      "id": "point_1",
       "title": "概括性标题",
       "content": "详细解释内容",
       "keywords": ["关键词1", "关键词2"]
@@ -1187,6 +1330,9 @@ function initAIChat() {
       bindMindMapEvents(mindMap);
     });
   }
+
+  // 添加聊天框点击事件监听
+  setupChatBotEventListeners();
 
   // 增强的思维导图实例检测
   const checkMindMapInstance = () => {
@@ -3467,6 +3613,110 @@ function countAllNodes(data) {
   return count;
 }
 
+// 检测右下角工具栏区域并返回详细信息
+function detectToolbarArea() {
+  // 检测可能的工具栏元素
+  const toolbarSelectors = [
+    '.sidebarTriggerContainer', // 侧边栏触发器
+    '[class*="toolbar"]',       // 包含toolbar的类名
+    '[class*="tool"]',          // 包含tool的类名
+    '.fixed',                   // 固定定位元素
+    '[style*="position: fixed"]', // 内联样式固定定位
+    '[class*="bottom"]',        // 底部相关的类名
+    '[style*="bottom"]'         // 底部定位的内联样式
+  ];
+
+  let toolbarInfo = {
+    hasToolbar: false,
+    maxHeight: 0,
+    maxRight: 0,
+    elements: []
+  };
+
+  toolbarSelectors.forEach(selector => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach(el => {
+      // 排除AI聊天框本身
+      if (el.id === 'aiChatBot' || el.closest('#aiChatBot')) {
+        return;
+      }
+
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+
+      // 检查是否在右下角区域（屏幕右侧1/3，底部1/3）
+      const isInBottomRight = rect.right > window.innerWidth * 0.66 &&
+                             rect.bottom > window.innerHeight * 0.66;
+
+      // 检查是否可见
+      const isVisible = style.display !== 'none' &&
+                       style.visibility !== 'hidden' &&
+                       style.opacity !== '0' &&
+                       rect.width > 0 && rect.height > 0;
+
+      if (isInBottomRight && isVisible) {
+        toolbarInfo.hasToolbar = true;
+        toolbarInfo.maxHeight = Math.max(toolbarInfo.maxHeight, window.innerHeight - rect.top);
+        toolbarInfo.maxRight = Math.max(toolbarInfo.maxRight, window.innerWidth - rect.left);
+        toolbarInfo.elements.push({
+          element: el,
+          rect: rect,
+          selector: selector
+        });
+
+        if (window.debugMode) {
+          console.log('检测到右下角工具栏:', el, rect, selector);
+        }
+      }
+    });
+  });
+
+  return toolbarInfo;
+}
+
+// 根据工具栏信息调整聊天框位置
+function adjustChatBotPosition(toolbarInfo) {
+  const chatBot = document.getElementById('aiChatBot');
+  if (!chatBot || !isMinimized) return;
+
+  if (toolbarInfo.hasToolbar) {
+    // 计算安全的底部位置，增加一些缓冲空间
+    const safeBottom = Math.max(80, toolbarInfo.maxHeight + 20);
+    chatBot.style.bottom = `${safeBottom}px`;
+
+    if (window.debugMode) {
+      console.log(`🔧 调整聊天框位置: bottom=${safeBottom}px, 工具栏高度=${toolbarInfo.maxHeight}px`);
+    }
+  } else {
+    // 没有工具栏时使用默认位置
+    chatBot.style.bottom = '80px';
+  }
+}
+
+// 设置聊天框事件监听器
+function setupChatBotEventListeners() {
+  // 监听窗口大小变化，重新检测工具栏
+  window.addEventListener('resize', () => {
+    if (isMinimized) {
+      setTimeout(() => {
+        const toolbarInfo = detectToolbarArea();
+        adjustChatBotPosition(toolbarInfo);
+      }, 100);
+    }
+  });
+
+  // 边缘标签的点击事件已经通过onclick属性直接绑定到toggleMinimize()
+  console.log('✅ 聊天框事件监听器已设置');
+
+  // 定期检测工具栏变化（每3秒检测一次）
+  setInterval(() => {
+    if (isMinimized) {
+      const toolbarInfo = detectToolbarArea();
+      adjustChatBotPosition(toolbarInfo);
+    }
+  }, 3000);
+}
+
 // 切换最小化状态
 function toggleMinimize() {
   isMinimized = !isMinimized;
@@ -3477,10 +3727,29 @@ function toggleMinimize() {
     chatBot.classList.add('minimized');
     minimizeBtn.textContent = '⬆️';
     minimizeBtn.title = '展开';
+
+    // 智能避让：检测工具栏并调整位置
+    const toolbarInfo = detectToolbarArea();
+    adjustChatBotPosition(toolbarInfo);
+
+    if (toolbarInfo.hasToolbar && window.debugMode) {
+      console.log('🔧 检测到工具栏，聊天框已自动避让:', toolbarInfo);
+    }
+
+    // 首次最小化时显示使用提示
+    if (!localStorage.getItem('ai_chat_minimized_tip_shown')) {
+      setTimeout(() => {
+        showNotification('💡 提示：点击屏幕右侧的"AI助手"标签可以快速展开聊天框', 'info', 5000);
+        localStorage.setItem('ai_chat_minimized_tip_shown', 'true');
+      }, 1000);
+    }
   } else {
     chatBot.classList.remove('minimized');
     minimizeBtn.textContent = '⬇️';
     minimizeBtn.title = '最小化';
+
+    // 展开时重置位置，移除内联样式让CSS接管
+    chatBot.style.bottom = '';
   }
 }
 
