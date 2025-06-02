@@ -351,7 +351,7 @@
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
-  white-space: pre-wrap;
+  /* white-space: pre-wrap */
 }
 
 /* Markdown样式 */
@@ -1657,7 +1657,6 @@ async function callRealAI(message) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
-        console.log(`📊 流式响应完成 - 总计处理 ${chunkCount} 个数据块，${totalBytes} 字节`);
         break;
       }
 
@@ -1666,11 +1665,6 @@ async function callRealAI(message) {
 
       const decodedText = decoder.decode(value, { stream: true });
       buffer += decodedText;
-
-      // 每100个块记录一次进度
-      if (chunkCount % 100 === 0) {
-        console.log(`📈 流式响应进度 - 已处理 ${chunkCount} 个数据块，${totalBytes} 字节`);
-      }
 
       // 改进的数据分割逻辑，处理可能的JSON截断问题
       let processedLines = [];
@@ -1748,12 +1742,8 @@ async function callRealAI(message) {
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             });
           } catch (e) {
-            console.warn('解析流式数据失败:', e);
-            console.warn('问题数据:', data.substring(0, 100) + (data.length > 100 ? '...' : ''));
-
             // 对于JSON解析失败，尝试将数据重新加入buffer等待下次处理
             if (data.includes('{') && !data.includes('}')) {
-              console.log('检测到不完整的JSON，重新加入buffer等待完整数据');
               buffer = 'data: ' + data + '\n' + buffer;
             }
           }
@@ -1762,7 +1752,6 @@ async function callRealAI(message) {
 
       // 如果检测到结束标记，跳出主循环
       if (shouldBreak) {
-        console.log('🎯 流式响应正常结束');
         break;
       }
     }
@@ -1809,24 +1798,10 @@ async function callRealAI(message) {
   console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
   console.log('💭 原始回答内容:', rawContent);
 
-  // 如果是推理模型，单独显示推理过程
-  if (reasoningResult.isReasoningModel) {
-    console.log('🧠 推理模型检测: 是');
-    if (reasoningResult.reasoning) {
-      console.log('🤔 推理过程:');
-      console.log('%c' + reasoningResult.reasoning, 'color: #888; font-style: italic;');
-    }
-    if (reasoningResult.finalAnswer) {
-      console.log('✅ 最终回答:', reasoningResult.finalAnswer);
-    }
-  } else {
-    console.log('🧠 推理模型检测: 否');
+  // 如果是推理模型，显示推理过程
+  if (reasoningResult.isReasoningModel && reasoningResult.reasoning) {
+    console.log('🤔 推理过程:', reasoningResult.reasoning);
   }
-
-  if (data.usage) {
-    console.log('📈 Token使用情况:', data.usage);
-  }
-  console.log('==================');
 
   // 分别处理显示和解析
   // 1. 用于显示：清理JSON片段，提供良好的用户体验
@@ -1837,13 +1812,8 @@ async function callRealAI(message) {
   const suggestions = extractSuggestions(contentForParsing);
   const structuredPoints = parseStructuredPoints(contentForParsing);
 
-  // 打印解析后的结果
-  console.log('=== 解析结果 ===');
-  console.log('📄 显示用清理后内容:', contentForDisplay);
-  console.log('🔍 解析用清理后内容:', contentForParsing);
-  console.log('💡 提取的建议:', suggestions);
+  // 打印核心解析结果
   console.log('📋 结构化分点:', structuredPoints);
-  console.log('===============');
 
   // 最终清理显示内容并应用Markdown解析
   if (contentElement) {
@@ -2299,23 +2269,16 @@ function cleanResponseContentForParsing(content) {
 
 // 解析结构化分点
 function parseStructuredPoints(content) {
-  console.log('🔍 parseStructuredPoints 开始解析内容:', content.substring(0, 200) + '...');
-
   try {
     // 查找JSON代码块
     const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-    console.log('🔍 JSON匹配结果:', jsonMatch ? '找到JSON块' : '未找到JSON块');
 
     if (!jsonMatch) {
-      console.log('❌ 未找到JSON代码块');
       return [];
     }
 
     const jsonString = jsonMatch[1];
-    console.log('🔍 提取的JSON字符串:', jsonString);
-
     const jsonData = JSON.parse(jsonString);
-    console.log('🔍 解析后的JSON数据:', jsonData);
 
     if (jsonData.structuredPoints && Array.isArray(jsonData.structuredPoints)) {
       const result = jsonData.structuredPoints.map((point, index) => ({
@@ -2324,14 +2287,10 @@ function parseStructuredPoints(content) {
         content: point.content || '',
         keywords: Array.isArray(point.keywords) ? point.keywords : []
       }));
-      console.log('✅ 成功解析结构化分点:', result);
       return result;
-    } else {
-      console.log('❌ JSON数据中没有有效的structuredPoints数组');
     }
   } catch (error) {
-    console.error('❌ 解析结构化分点失败:', error);
-    console.error('错误详情:', error.message);
+    console.error('解析结构化分点失败:', error.message);
   }
   return [];
 }
@@ -2556,9 +2515,7 @@ async function streamResponse(fullContent, suggestions, structuredPoints) {
     fullContent = String(fullContent || '');
   }
 
-  console.log('🚀 开始逐字输出，内容长度:', fullContent.length);
-  console.log('🚀 内容类型:', typeof fullContent);
-  console.log('🚀 内容预览:', fullContent.substring(0, 100));
+
 
   // 创建消息容器
   const messagesContainer = document.getElementById('chatMessages');
@@ -2643,7 +2600,6 @@ async function streamResponse(fullContent, suggestions, structuredPoints) {
     addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId);
   }, 500);
 
-  console.log('✅ 逐字输出完成');
   return { content: fullContent, suggestions, structuredPoints };
 }
 
