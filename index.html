@@ -992,6 +992,33 @@
   display: block;
   margin-bottom: 6px;
 }
+
+/* 分点加载动画 */
+@keyframes loadingDot {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+.points-loading {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>
 
 <script>
@@ -1623,6 +1650,7 @@ async function callRealAI(message) {
   let finalAnswer = '';
   let isReasoningModel = false;
   let buffer = '';
+  let pointsLoadingShown = false; // 添加标志位，防止重复显示加载动画
 
   // 移除加载消息，准备显示流式内容
   const loadingMessage = document.getElementById('loadingMessage');
@@ -1729,11 +1757,39 @@ async function callRealAI(message) {
               rawContent += delta.content;
               finalAnswer += delta.content;
 
-              // 实时清理并显示内容（避免JSON片段显示）
-              // 注意：这里只用于显示，不影响最终的JSON解析
-              const cleanedContentForDisplay = cleanResponseContentForDisplay(rawContent);
+              // 改进的JSON检测逻辑 - 更稳定的检测方式
+              const hasJsonStart = rawContent.includes('```json');
+              const hasStructuredPoints = rawContent.includes('structuredPoints');
 
-              // 实现打字机效果 - 使用清理后的内容用于显示
+              // 更准确的JSON结束检测
+              let hasJsonEnd = false;
+              if (hasJsonStart) {
+                const jsonStartIndex = rawContent.lastIndexOf('```json');
+                const afterJsonStart = rawContent.substring(jsonStartIndex + 7); // 7是'```json'的长度
+                hasJsonEnd = afterJsonStart.includes('```') && hasStructuredPoints;
+              }
+
+              // 检测是否应该显示加载动画（只在第一次检测到时显示）
+              const shouldShowLoading = hasJsonStart && hasStructuredPoints && !hasJsonEnd;
+
+              // 如果检测到JSON开始且包含结构化内容，且还没有显示过加载动画
+              if (shouldShowLoading && !pointsLoadingShown) {
+                console.log('🔍 检测到结构化分点开始，显示加载动画');
+                // 在消息容器中显示加载动画，而不是在内容元素中
+                const messageContainer = contentElement.closest('.message-content');
+                showPointsLoadingAnimation(messageContainer);
+                pointsLoadingShown = true; // 设置标志位，防止重复显示
+              }
+              // 如果JSON已完成，隐藏加载动画
+              else if (hasJsonEnd && pointsLoadingShown) {
+                console.log('✅ 结构化分点完成，隐藏加载动画');
+                const messageContainer = contentElement.closest('.message-content');
+                hidePointsLoadingAnimation(messageContainer);
+                pointsLoadingShown = false; // 重置标志位
+              }
+
+              // 始终更新内容显示
+              const cleanedContentForDisplay = cleanResponseContentForDisplay(rawContent);
               await typewriterEffectWithCleanContent(contentElement, cleanedContentForDisplay);
             }
 
@@ -1997,6 +2053,79 @@ async function typewriterEffectWithCleanContent(element, cleanedContent) {
     // 简单的延迟
     setTimeout(resolve, 10);
   });
+}
+
+// 显示分点加载动画
+function showPointsLoadingAnimation(contentElement) {
+  // 检查是否已经有加载动画，避免重复添加
+  if (contentElement.querySelector('.points-loading')) {
+    console.log('🔄 分点加载动画已存在，跳过添加');
+    return;
+  }
+
+  console.log('📋 显示分点加载动画');
+
+  const loadingHtml = `
+    <div class="points-loading" data-loading-id="${Date.now()}" style="
+      margin: 10px 0;
+      padding: 8px 12px;
+      background: #f0f8ff;
+      border: 1px solid #e1f5fe;
+      border-radius: 6px;
+      color: #1976d2;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    ">
+      <span>📋</span>
+      <span>分点加载中</span>
+      <span class="loading-dots">
+        <span class="dot" style="
+          display: inline-block;
+          width: 4px;
+          height: 4px;
+          background: #1976d2;
+          border-radius: 50%;
+          margin: 0 1px;
+          animation: loadingDot 1.4s infinite ease-in-out both;
+        "></span>
+        <span class="dot" style="
+          display: inline-block;
+          width: 4px;
+          height: 4px;
+          background: #1976d2;
+          border-radius: 50%;
+          margin: 0 1px;
+          animation: loadingDot 1.4s infinite ease-in-out both;
+          animation-delay: -0.32s;
+        "></span>
+        <span class="dot" style="
+          display: inline-block;
+          width: 4px;
+          height: 4px;
+          background: #1976d2;
+          border-radius: 50%;
+          margin: 0 1px;
+          animation: loadingDot 1.4s infinite ease-in-out both;
+          animation-delay: -0.16s;
+        "></span>
+      </span>
+    </div>
+  `;
+
+  contentElement.insertAdjacentHTML('beforeend', loadingHtml);
+}
+
+// 隐藏分点加载动画
+function hidePointsLoadingAnimation(contentElement) {
+  const loadingElement = contentElement.querySelector('.points-loading');
+  if (loadingElement) {
+    console.log('🚫 隐藏分点加载动画');
+    loadingElement.remove();
+  } else {
+    console.log('⚠️ 未找到分点加载动画元素');
+  }
 }
 
 // 从内容中提取推理过程（用于非官方推理模型格式）
@@ -2597,7 +2726,19 @@ async function streamResponse(fullContent, suggestions, structuredPoints) {
 
   // 输出完成后添加建议和结构化分点
   setTimeout(() => {
-    addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId);
+    // 如果有结构化分点，先显示加载动画
+    if (structuredPoints && structuredPoints.length > 0) {
+      const messageContainer = messageDiv.querySelector('.message-content');
+      showPointsLoadingAnimation(messageContainer);
+
+      // 延迟一段时间后显示实际的分点
+      setTimeout(() => {
+        hidePointsLoadingAnimation(messageContainer);
+        addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId);
+      }, 2500); // 2.5秒的加载动画，让用户能清楚看到
+    } else {
+      addSuggestionsAndPoints(messageDiv, suggestions, structuredPoints, messageId);
+    }
   }, 500);
 
   return { content: fullContent, suggestions, structuredPoints };

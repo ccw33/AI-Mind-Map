@@ -34,23 +34,16 @@ function cleanResponseContentForParsing(content) {
 
 // 模拟parseStructuredPoints函数
 function parseStructuredPoints(content) {
-  console.log('🔍 parseStructuredPoints 开始解析内容:', content.substring(0, 200) + '...');
-
   try {
     // 查找JSON代码块
     const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-    console.log('🔍 JSON匹配结果:', jsonMatch ? '找到JSON块' : '未找到JSON块');
 
     if (!jsonMatch) {
-      console.log('❌ 未找到JSON代码块');
       return [];
     }
 
     const jsonString = jsonMatch[1];
-    console.log('🔍 提取的JSON字符串:', jsonString);
-
     const jsonData = JSON.parse(jsonString);
-    console.log('🔍 解析后的JSON数据:', jsonData);
 
     if (jsonData.structuredPoints && Array.isArray(jsonData.structuredPoints)) {
       const result = jsonData.structuredPoints.map((point, index) => ({
@@ -59,14 +52,10 @@ function parseStructuredPoints(content) {
         content: point.content || '',
         keywords: Array.isArray(point.keywords) ? point.keywords : []
       }));
-      console.log('✅ 成功解析结构化分点:', result);
       return result;
-    } else {
-      console.log('❌ JSON数据中没有有效的structuredPoints数组');
     }
   } catch (error) {
-    console.error('❌ 解析结构化分点失败:', error);
-    console.error('错误详情:', error.message);
+    console.error('解析结构化分点失败:', error.message);
   }
   return [];
 }
