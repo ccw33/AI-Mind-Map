@@ -1050,6 +1050,83 @@
   font-style: normal;
 }
 
+/* 推理内容中的markdown元素样式 */
+.reasoning-content p {
+  margin: 4px 0;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.reasoning-content h1, .reasoning-content h2, .reasoning-content h3,
+.reasoning-content h4, .reasoning-content h5, .reasoning-content h6 {
+  margin: 6px 0 4px 0;
+  color: #555;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-style: normal;
+}
+
+.reasoning-content ul, .reasoning-content ol {
+  margin: 4px 0;
+  padding-left: 16px;
+  color: #666;
+  font-size: 13px;
+}
+
+.reasoning-content li {
+  margin: 2px 0;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.reasoning-content strong {
+  font-weight: 600;
+  color: #555;
+  font-style: normal;
+}
+
+.reasoning-content em {
+  font-style: italic;
+  color: #666;
+}
+
+.reasoning-content code {
+  background: #e8e8e8;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  color: #555;
+  font-style: normal;
+}
+
+.reasoning-content pre {
+  background: #e8e8e8;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.3;
+  font-style: normal;
+}
+
+.reasoning-content blockquote {
+  border-left: 3px solid #999;
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: #f0f0f0;
+  color: #666;
+  font-style: italic;
+}
+
 .final-answer {
   margin-top: 8px;
   padding-top: 8px;
@@ -1710,17 +1787,43 @@ function sendQuickMessage(message) {
   sendMessage();
 }
 
-// 发送消息
-async function sendMessage() {
+// 重试最后一条消息
+function retryLastMessage() {
+  // 查找最后一条用户消息
+  const userMessages = messages.filter(msg => msg.role === 'user');
+  if (userMessages.length === 0) {
+    console.warn('没有找到可重试的消息');
+    return;
+  }
+
+  const lastUserMessage = userMessages[userMessages.length - 1].content;
+  console.log('🔄 重试最后一条消息:', lastUserMessage);
+
+  // 移除最后一条AI回复（如果存在）
+  const messagesContainer = document.getElementById('chatMessages');
+  const lastAssistantMessage = messagesContainer.querySelector('.message-item.assistant:last-child');
+  if (lastAssistantMessage) {
+    lastAssistantMessage.remove();
+  }
+
+  // 重新发送消息
+  sendMessage(0, lastUserMessage);
+}
+
+// 发送消息（带重试机制）
+async function sendMessage(retryCount = 0, originalMessage = null) {
   const input = document.getElementById('messageInput');
-  const message = input.value.trim();
+  const message = originalMessage || input.value.trim();
 
-  if (!message || isLoading) return;
+  if (!message || (isLoading && retryCount === 0)) return;
 
-  input.value = '';
-
-  // 添加用户消息
-  addMessage('user', message);
+  // 只在第一次发送时清空输入框和添加用户消息
+  if (retryCount === 0) {
+    input.value = '';
+    addMessage('user', message);
+  } else {
+    console.log(`🔄 第${retryCount}次重试发送消息: ${message.substring(0, 50)}...`);
+  }
 
   // 设置加载状态
   setLoading(true);
@@ -1735,7 +1838,27 @@ async function sendMessage() {
     console.log('✅ AI回复完成:', response);
   } catch (error) {
     console.error('AI回复失败:', error);
-    addMessage('assistant', '抱歉，我现在无法回复。请检查AI配置或稍后再试。');
+
+    // 检查是否应该自动重试
+    const shouldRetry = retryCount < 2 && // 最多重试2次
+                       aiConfig.apiKey && // 只对真实API重试
+                       (error.name === 'AbortError' || // 超时错误
+                        error.message.includes('network') || // 网络错误
+                        error.message.includes('fetch')); // 连接错误
+
+    if (shouldRetry) {
+      console.log(`⏳ 将在3秒后自动重试（${retryCount + 1}/2）...`);
+      setTimeout(() => {
+        sendMessage(retryCount + 1, message);
+      }, 3000);
+      return;
+    }
+
+    // 不重试或重试次数用完，显示错误消息
+    const errorMessage = retryCount > 0
+      ? `抱歉，重试${retryCount}次后仍然失败。请检查网络连接或稍后再试。`
+      : '抱歉，我现在无法回复。请检查AI配置或稍后再试。';
+    addMessage('assistant', errorMessage);
   } finally {
     setLoading(false);
   }
@@ -1795,20 +1918,31 @@ async function callRealAI(message) {
 
   console.log('==================');
 
+  // 根据模型类型动态设置max_tokens
+  let maxTokens = 64000; // 默认值
+  if (model.toLowerCase().includes('deepseek-chat')) {
+    maxTokens = 8000;
+  } else if (model.toLowerCase().includes('deepseek-reasoner')) {
+    maxTokens = 64000;
+  }
+
   const requestBody = {
     model,
     messages,
-    max_tokens: 2000,
+    max_tokens: maxTokens,
     temperature: 0.7,
     stream: true
   };
 
-  // 添加超时控制
+  // 添加超时控制 - 推理模型需要更长时间
   const controller = new AbortController();
+  const isReasoningModelByName = model.toLowerCase().includes('reasoner') || model.toLowerCase().includes('reasoning');
+  const timeoutDuration = isReasoningModelByName ? 600000 : 300000; // 推理模型10分钟，普通模型5分钟
+
   const timeoutId = setTimeout(() => {
-    console.warn('⏰ API请求超时，正在中止请求');
+    console.warn(`⏰ API请求超时（${timeoutDuration/1000}秒），正在中止请求`);
     controller.abort();
-  }, 300000); // 5分钟超时
+  }, timeoutDuration);
 
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
@@ -1867,15 +2001,47 @@ async function callRealAI(message) {
   try {
     let chunkCount = 0;
     let totalBytes = 0;
+    let lastChunkTime = Date.now();
+    const maxIdleTime = 60000; // 60秒无数据则认为连接可能有问题
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
+        console.log(`📊 流式响应完成 - 总计处理 ${chunkCount} 个数据块，${totalBytes} 字节`);
+
+        // 检查是否是异常结束（没有收到[DONE]标记）
+        if (!shouldBreak && rawContent.length > 100) {
+          console.warn('⚠️ 流式响应异常结束：未收到[DONE]标记，可能被服务器截断');
+
+          // 在界面上显示警告
+          if (contentElement) {
+            const warningHtml = `<div style="color: #e67e22; padding: 8px; margin: 8px 0; border: 1px solid #f39c12; border-radius: 4px; background: #fef9e7; font-size: 12px;">
+              <strong>⚠️ 检测到响应可能被截断</strong><br>
+              服务器可能在生成过程中断开连接。建议：<br>
+              1. 重新发送消息<br>
+              2. 尝试简化问题<br>
+              3. 检查网络连接
+            </div>`;
+            contentElement.insertAdjacentHTML('afterend', warningHtml);
+          }
+        }
         break;
       }
 
       chunkCount++;
       totalBytes += value.length;
+      lastChunkTime = Date.now();
+
+      // 每50个块记录一次进度（降低频率，减少日志噪音）
+      if (isReasoningModelByName && chunkCount % 50 === 0) {
+        console.log(`📈 推理模型响应进度 - 已处理 ${chunkCount} 个数据块，${totalBytes} 字节`);
+      }
+
+      // 检查是否接收到过多数据（可能的无限循环保护）
+      if (totalBytes > 50 * 1024 * 1024) { // 50MB限制
+        console.warn('⚠️ 响应数据过大，可能存在问题，主动中断');
+        break;
+      }
 
       const decodedText = decoder.decode(value, { stream: true });
       buffer += decodedText;
@@ -1932,7 +2098,9 @@ async function callRealAI(message) {
                 // 使用requestAnimationFrame优化DOM更新性能
                 requestAnimationFrame(() => {
                   if (reasoningElement) {
-                    reasoningElement.textContent = reasoning;
+                    // 对推理内容也进行markdown解析
+                    const parsedReasoning = parseMarkdown(reasoning);
+                    reasoningElement.innerHTML = parsedReasoning;
                     reasoningElement.style.display = 'block';
                   }
                 });
@@ -1984,9 +2152,24 @@ async function callRealAI(message) {
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             });
           } catch (e) {
+            // 改进的JSON解析错误处理
+            console.warn('JSON解析失败，数据片段:', data.substring(0, 100) + (data.length > 100 ? '...' : ''));
+
             // 对于JSON解析失败，尝试将数据重新加入buffer等待下次处理
             if (data.includes('{') && !data.includes('}')) {
+              console.log('🔄 检测到不完整JSON，重新加入缓冲区等待更多数据');
               buffer = 'data: ' + data + '\n' + buffer;
+            } else if (data.includes('{') && data.includes('}')) {
+              // 可能是格式问题，尝试修复常见的JSON格式错误
+              try {
+                // 尝试修复常见的JSON格式问题
+                let fixedData = data.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+                const parsed = JSON.parse(fixedData);
+                console.log('✅ JSON修复成功，继续处理');
+                // 这里可以继续处理修复后的JSON
+              } catch (fixError) {
+                console.warn('JSON修复失败:', fixError.message);
+              }
             }
           }
         }
@@ -1994,13 +2177,48 @@ async function callRealAI(message) {
 
       // 如果检测到结束标记，跳出主循环
       if (shouldBreak) {
+        console.log('🎯 流式响应正常结束');
         break;
+      }
+
+      // 检查连接空闲时间（仅对推理模型）
+      if (isReasoningModelByName) {
+        const idleTime = Date.now() - lastChunkTime;
+        if (idleTime > maxIdleTime) {
+          console.warn(`⚠️ 推理模型响应空闲时间过长（${idleTime/1000}秒），可能存在连接问题`);
+
+          // 对于推理模型，给予更多耐心，但记录警告
+          if (idleTime > maxIdleTime * 2) { // 2分钟无响应
+            console.error(`❌ 推理模型响应超时（${idleTime/1000}秒），强制中断连接`);
+            break;
+          }
+        }
+      }
+
+      // 检查是否有实际内容更新（防止空数据循环）
+      const currentContentLength = rawContent.length;
+      if (chunkCount > 100 && currentContentLength === 0) {
+        console.warn('⚠️ 处理了大量数据块但没有实际内容，可能存在问题');
       }
     }
   } catch (error) {
     console.error('流式处理失败:', error);
+
+    // 根据错误类型提供更具体的错误信息
+    let errorMessage = '抱歉，处理响应时出现错误。';
+    if (error.name === 'AbortError') {
+      errorMessage = `请求超时（${timeoutDuration/1000}秒）。推理模型需要较长时间生成内容，请稍后重试。`;
+    } else if (error.message.includes('network') || error.message.includes('fetch')) {
+      errorMessage = '网络连接错误，请检查网络状态后重试。';
+    } else if (error.message.includes('JSON')) {
+      errorMessage = '响应格式解析错误，可能是服务器返回了不完整的数据。';
+    }
+
     if (contentElement) {
-      contentElement.textContent = '抱歉，处理响应时出现错误。';
+      contentElement.innerHTML = `<div style="color: #f56565; padding: 10px; border: 1px solid #fed7d7; border-radius: 4px; background: #fef5e7;">
+        <strong>⚠️ 错误：</strong>${errorMessage}
+        <br><small>错误详情：${error.message}</small>
+      </div>`;
     }
   }
 
@@ -2013,7 +2231,9 @@ async function callRealAI(message) {
       finalAnswer = reasoningResult.finalAnswer;
 
       if (reasoning) {
-        reasoningElement.textContent = reasoning;
+        // 对推理内容也进行markdown解析
+        const parsedReasoning = parseMarkdown(reasoning);
+        reasoningElement.innerHTML = parsedReasoning;
         reasoningElement.style.display = 'block';
       }
 
@@ -2035,10 +2255,31 @@ async function callRealAI(message) {
   // 检测并处理推理过程
   const reasoningResult = extractReasoningProcess(data, rawContent);
 
+  // 检查响应完整性
+  const isResponseComplete = checkResponseCompleteness(rawContent, isReasoningModelByName);
+  if (!isResponseComplete.complete) {
+    console.warn('⚠️ 响应可能不完整:', isResponseComplete.reason);
+    if (contentElement) {
+      const suggestionsHtml = isResponseComplete.suggestions
+        ? `<br><strong>建议：</strong><br>${isResponseComplete.suggestions.map((s, i) => `${i + 1}. ${s}`).join('<br>')}`
+        : '';
+
+      const warningHtml = `<div style="color: #e67e22; padding: 10px; margin: 8px 0; border: 1px solid #f39c12; border-radius: 4px; background: #fef9e7; font-size: 13px; line-height: 1.4;">
+        <strong>⚠️ 检测到响应不完整</strong><br>
+        <strong>原因：</strong>${isResponseComplete.reason}${suggestionsHtml}
+        <br><br>
+        <button onclick="retryLastMessage()" style="background: #409eff; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 5px;">重试</button>
+        <button onclick="this.parentElement.style.display='none'" style="background: #f39c12; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">知道了</button>
+      </div>`;
+      contentElement.insertAdjacentHTML('afterend', warningHtml);
+    }
+  }
+
   // 打印原始响应到控制台
   console.log('=== LLM API 响应 ===');
   console.log('📊 完整响应数据:', JSON.stringify(data, null, 2));
   console.log('💭 原始回答内容:', rawContent);
+  console.log('🔍 响应完整性检查:', isResponseComplete);
 
   // 如果是推理模型，显示推理过程
   if (reasoningResult.isReasoningModel && reasoningResult.reasoning) {
@@ -2285,6 +2526,110 @@ function hidePointsLoadingAnimation(contentElement) {
   } else {
     console.log('⚠️ 未找到分点加载动画元素');
   }
+}
+
+// 检查响应完整性
+function checkResponseCompleteness(content, isReasoningModel) {
+  const result = {
+    complete: true,
+    reason: '',
+    suggestions: []
+  };
+
+  if (!content || content.trim().length === 0) {
+    result.complete = false;
+    result.reason = '响应内容为空';
+    result.suggestions = ['检查网络连接', '重新发送消息', '尝试简化问题'];
+    return result;
+  }
+
+  // 检查是否以句号、感叹号、问号等结尾
+  const lastChar = content.trim().slice(-1);
+  const properEndings = ['.', '!', '?', '。', '！', '？', '```', '}', ')', ']'];
+  const hasProperEnding = properEndings.some(ending => content.trim().endsWith(ending));
+
+  // 检查JSON完整性
+  const hasJsonStart = content.includes('```json');
+  const hasStructuredPoints = content.includes('structuredPoints');
+  let hasCompleteJson = false;
+
+  if (hasJsonStart && hasStructuredPoints) {
+    const jsonStartIndex = content.lastIndexOf('```json');
+    const afterJsonStart = content.substring(jsonStartIndex + 7);
+    hasCompleteJson = afterJsonStart.includes('```') && afterJsonStart.includes('}');
+  }
+
+  // 检查是否是典型的服务器截断模式
+  const truncationPatterns = [
+    /例如，.*在\d{4}年$/,  // "例如，苹果在2008年"
+    /如.*公司.*在$/,       // "如某公司在"
+    /根据.*数据.*显示$/,   // "根据某数据显示"
+    /实证.*研究.*表明$/,   // "实证研究表明"
+    /；.*例如$/,          // "；例如"
+    /例如，[^。！？]*$/,   // "例如，"后面没有结束标点
+    /，其.*$/,            // "，其"结尾
+    /在.*中$/,            // "在...中"结尾但可能不完整
+    /通过.*$/,            // "通过"结尾但可能不完整
+    /根据.*$/,            // "根据"结尾但可能不完整
+  ];
+
+  const hasTypicalTruncation = truncationPatterns.some(pattern => pattern.test(content.trim()));
+
+  // 对于推理模型，检查更严格
+  if (isReasoningModel) {
+    // 检查是否有推理过程的结束标记
+    const hasReasoningContent = content.includes('思考') || content.includes('分析') || content.includes('推理');
+
+    if (hasJsonStart && hasStructuredPoints && !hasCompleteJson) {
+      result.complete = false;
+      result.reason = 'JSON结构化数据不完整';
+      result.suggestions = ['重新发送消息', '等待更长时间', '检查网络稳定性'];
+      return result;
+    }
+
+    if (hasReasoningContent && !hasProperEnding && content.length > 100) {
+      result.complete = false;
+      result.reason = '推理内容可能被截断';
+      result.suggestions = ['重新发送消息', '尝试分段提问', '检查是否达到模型输出限制'];
+      return result;
+    }
+
+    // 检查典型的推理模型截断模式
+    if (hasTypicalTruncation) {
+      result.complete = false;
+      result.reason = '检测到典型的服务器截断模式';
+      result.suggestions = ['重新发送消息', '尝试简化问题', '分段提问以获得完整回答'];
+      return result;
+    }
+  }
+
+  // 检查是否在句子中间截断
+  const lastSentence = content.trim().split(/[.!?。！？]/).pop();
+  if (lastSentence && lastSentence.length > 50 && !hasProperEnding) {
+    result.complete = false;
+    result.reason = '可能在句子中间截断';
+    result.suggestions = ['重新发送消息', '检查网络连接'];
+    return result;
+  }
+
+  // 检查是否有未完成的代码块
+  const codeBlockCount = (content.match(/```/g) || []).length;
+  if (codeBlockCount % 2 !== 0) {
+    result.complete = false;
+    result.reason = '代码块未正确闭合';
+    result.suggestions = ['重新发送消息'];
+    return result;
+  }
+
+  // 检查内容长度是否异常短（对于复杂问题）
+  if (isReasoningModel && content.length < 500 && !hasProperEnding) {
+    result.complete = false;
+    result.reason = '推理模型回答异常简短，可能被截断';
+    result.suggestions = ['重新发送消息', '检查模型配置'];
+    return result;
+  }
+
+  return result;
 }
 
 // 从内容中提取推理过程（用于非官方推理模型格式）
@@ -2599,8 +2944,25 @@ async function simulateAIResponseStreaming(message) {
   let fullContent = '';
   let suggestions = [];
   let structuredPoints = [];
+  let reasoningContent = '';
 
   if (message.includes('扩展')) {
+    // 添加推理内容
+    reasoningContent = `用户想要扩展"${currentSelectedNodeText}"这个节点。我需要从多个维度来分析这个主题：
+
+**分析思路：**
+1. 首先确定这个概念的**基础定义**和核心特征
+2. 然后分析其**技术特点**，包括优势和局限性
+3. 接着探讨**应用领域**，涵盖商业、技术、教育等场景
+4. 最后展望**发展趋势**，分析现状和未来方向
+
+**扩展策略：**
+- 采用**层次化结构**，从基础到应用再到趋势
+- 每个维度都提供**具体的子分类**
+- 确保内容的**实用性**和**可操作性**
+
+这样的扩展方式能够帮助用户全面理解这个主题，并为后续的深入学习提供清晰的路径。`;
+
     fullContent = `## 关于"${currentSelectedNodeText}"的扩展建议
 
 我为您提供了详细的扩展方案，包括多个维度的分析：
@@ -2658,6 +3020,22 @@ async function simulateAIResponseStreaming(message) {
       }
     ];
   } else if (message.includes('解释')) {
+    // 添加推理内容
+    reasoningContent = `用户需要我解释"${currentSelectedNodeText}"这个概念。我需要采用系统性的方法来提供清晰的解释：
+
+**解释策略：**
+1. **基本含义**：从定义入手，建立基础认知
+2. **核心要素**：分解关键组成部分，便于理解
+3. **运作机制**：说明工作原理，加深理解
+
+**解释原则：**
+- 从**简单到复杂**，循序渐进
+- 使用**具体例子**和**类比**来辅助理解
+- 突出**关键特征**和**重要区别**
+- 确保解释的**准确性**和**完整性**
+
+这样的解释方式能够帮助用户建立对这个概念的全面理解。`;
+
     fullContent = `## "${currentSelectedNodeText}"的详细解释
 
 我为您提供了全面的解释，包含多个层面的分析：
@@ -2706,6 +3084,26 @@ ${currentSelectedNodeText}的工作原理和运作方式：
       }
     ];
   } else if (message.includes('应用')) {
+    // 添加推理内容
+    reasoningContent = `用户询问"${currentSelectedNodeText}"的应用场景。我需要从实际应用的角度来分析这个主题：
+
+**应用分析思路：**
+1. **商业场景**：考虑企业和商业环境中的实际需求
+2. **技术场景**：关注技术开发和工程实践中的应用
+3. **教育场景**：分析在教学和培训中的价值
+
+**分析维度：**
+- **实用性**：每个应用场景的实际价值
+- **可操作性**：具体的实施方法和步骤
+- **效果评估**：预期的改进效果和收益
+
+**应用原则：**
+- 结合**具体场景**，避免空泛的描述
+- 突出**实际价值**和**解决的问题**
+- 提供**可行的实施建议**
+
+这样的应用分析能够帮助用户理解如何在实际工作中运用这个概念。`;
+
     fullContent = `## "${currentSelectedNodeText}"的应用场景分析
 
 我整理了多个实际应用场景供您参考：
@@ -2754,6 +3152,23 @@ ${currentSelectedNodeText}的工作原理和运作方式：
       }
     ];
   } else {
+    // 添加推理内容
+    reasoningContent = `用户提出了关于"${currentSelectedNodeText}"的问题。我需要提供一个全面而有用的回答：
+
+**分析策略：**
+1. **概述分析**：首先建立对主题的整体认知
+2. **关键点识别**：找出最重要的核心要素
+3. **价值评估**：分析其重要性和实际价值
+
+**回答原则：**
+- 保持**客观性**和**准确性**
+- 提供**多角度**的分析视角
+- 确保内容的**实用性**和**可理解性**
+- 为后续深入探讨提供**清晰的方向**
+
+**目标：**
+帮助用户建立对这个主题的基础认知，并为进一步的学习和应用提供指导。`;
+
     fullContent = `## 关于"${currentSelectedNodeText}"的分析
 
 我理解您的问题，这是一个很有趣的话题。让我为您提供多角度的分析：
@@ -2792,18 +3207,21 @@ ${currentSelectedNodeText}的工作原理和运作方式：
   }
 
   // 执行逐字输出
-  return await streamResponse(fullContent, suggestions, structuredPoints);
+  return await streamResponse(fullContent, suggestions, structuredPoints, reasoningContent);
 }
 
 // 逐字输出函数
-async function streamResponse(fullContent, suggestions, structuredPoints) {
+async function streamResponse(fullContent, suggestions, structuredPoints, reasoningContent = '') {
   // 确保fullContent是字符串
   if (typeof fullContent !== 'string') {
     console.error('streamResponse接收到非字符串fullContent:', typeof fullContent, fullContent);
     fullContent = String(fullContent || '');
   }
 
-
+  // 确保reasoningContent是字符串
+  if (typeof reasoningContent !== 'string') {
+    reasoningContent = String(reasoningContent || '');
+  }
 
   // 创建消息容器
   const messagesContainer = document.getElementById('chatMessages');
@@ -2816,12 +3234,30 @@ async function streamResponse(fullContent, suggestions, structuredPoints) {
   messageDiv.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message-content">
+      ${reasoningContent ? `<div id="${messageId}_reasoning" class="reasoning-content" style="display: none;"></div>` : ''}
       <div class="message-text" id="${messageId}_text"></div>
     </div>
   `;
 
   messagesContainer.appendChild(messageDiv);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  // 如果有推理内容，先显示推理过程
+  if (reasoningContent) {
+    const reasoningElement = document.getElementById(`${messageId}_reasoning`);
+    if (reasoningElement) {
+      // 对推理内容进行markdown解析并显示
+      const parsedReasoning = parseMarkdown(reasoningContent);
+      reasoningElement.innerHTML = parsedReasoning;
+      reasoningElement.style.display = 'block';
+
+      // 滚动到底部
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      // 等待一段时间让用户看到推理过程
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+  }
 
   const textElement = document.getElementById(`${messageId}_text`);
   let currentText = '';

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>推理内容Markdown解析测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .test-container {
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .reasoning-content {
+            background: #f8f9fa;
+            border-left: 3px solid #888;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 0 8px 8px 0;
+            font-style: italic;
+            color: #666;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .reasoning-content::before {
+            content: "🤔 思考过程：";
+            font-weight: 600;
+            color: #888;
+            display: block;
+            margin-bottom: 6px;
+            font-style: normal;
+        }
+
+        /* 推理内容中的markdown元素样式 */
+        .reasoning-content p {
+            margin: 4px 0;
+            color: #666;
+            font-size: 13px;
+            line-height: 1.4;
+            font-style: italic;
+        }
+
+        .reasoning-content h1, .reasoning-content h2, .reasoning-content h3,
+        .reasoning-content h4, .reasoning-content h5, .reasoning-content h6 {
+            margin: 6px 0 4px 0;
+            color: #555;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.3;
+            font-style: normal;
+        }
+
+        .reasoning-content ul, .reasoning-content ol {
+            margin: 4px 0;
+            padding-left: 16px;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .reasoning-content li {
+            margin: 2px 0;
+            color: #666;
+            font-size: 13px;
+            line-height: 1.4;
+            font-style: italic;
+        }
+
+        .reasoning-content strong {
+            font-weight: 600;
+            color: #555;
+            font-style: normal;
+        }
+
+        .reasoning-content em {
+            font-style: italic;
+            color: #666;
+        }
+
+        .reasoning-content code {
+            background: #e8e8e8;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            color: #555;
+            font-style: normal;
+        }
+
+        .final-answer {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e8e8e8;
+        }
+
+        .final-answer::before {
+            content: "✅ 最终回答：";
+            font-weight: 600;
+            color: #409eff;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        button {
+            background: #409eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+
+        button:hover {
+            background: #337ecc;
+        }
+
+        .raw-content {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>推理内容Markdown解析测试</h1>
+
+    <div class="test-container">
+        <h2>测试1: 基础推理内容</h2>
+        <button onclick="testBasicReasoning()">测试基础推理</button>
+        <div id="test1-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>测试2: 复杂推理内容（包含列表和加粗）</h2>
+        <button onclick="testComplexReasoning()">测试复杂推理</button>
+        <div id="test2-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>测试3: 推理内容与最终回答</h2>
+        <button onclick="testReasoningWithAnswer()">测试推理+回答</button>
+        <div id="test3-result"></div>
+    </div>
+
+    <script>
+        // 初始化marked.js
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                sanitize: false,
+                smartLists: true,
+                smartypants: false
+            });
+        }
+
+        // Markdown解析函数（从主项目复制）
+        function parseMarkdown(content) {
+            if (typeof content !== 'string') {
+                console.warn('parseMarkdown接收到非字符串内容:', typeof content, content);
+                return String(content || '');
+            }
+
+            if (typeof marked === 'undefined') {
+                console.warn('marked.js未加载，使用降级解析');
+                return content.replace(/\n/g, '<br>');
+            }
+
+            try {
+                let html = marked.parse(content);
+                if (typeof html !== 'string') {
+                    console.warn('marked.parse返回非字符串:', typeof html, html);
+                    return content.replace(/\n/g, '<br>');
+                }
+                return html;
+            } catch (error) {
+                console.warn('marked.js解析失败:', error);
+                return content.replace(/\n/g, '<br>');
+            }
+        }
+
+        function testBasicReasoning() {
+            const reasoningContent = `用户想要了解人工智能的基本概念。我需要提供一个清晰的解释：
+
+**分析思路：**
+1. 从定义开始，建立基础认知
+2. 解释核心特征和能力
+3. 提供实际应用例子
+
+这样的解释方式能够帮助用户快速理解AI的本质。`;
+
+            const resultDiv = document.getElementById('test1-result');
+            resultDiv.innerHTML = `
+                <h4>原始内容：</h4>
+                <div class="raw-content">${reasoningContent}</div>
+                <h4>解析后的推理内容：</h4>
+                <div class="reasoning-content">${parseMarkdown(reasoningContent)}</div>
+            `;
+        }
+
+        function testComplexReasoning() {
+            const reasoningContent = `用户询问**机器学习**的应用场景。我需要从多个维度来分析：
+
+**分析维度：**
+- **技术层面**：算法和模型的选择
+- **业务层面**：实际价值和ROI
+- **实施层面**：技术难度和资源需求
+
+**具体步骤：**
+1. 识别常见的应用领域
+2. 分析每个领域的特点
+3. 提供具体的实施建议
+
+**预期效果：**
+帮助用户理解机器学习在不同场景下的应用价值和实施方法。`;
+
+            const resultDiv = document.getElementById('test2-result');
+            resultDiv.innerHTML = `
+                <h4>原始内容：</h4>
+                <div class="raw-content">${reasoningContent}</div>
+                <h4>解析后的推理内容：</h4>
+                <div class="reasoning-content">${parseMarkdown(reasoningContent)}</div>
+            `;
+        }
+
+        function testReasoningWithAnswer() {
+            const reasoningContent = `用户想要了解**深度学习**的核心概念。我需要采用层次化的解释方法：
+
+**教学策略：**
+1. **基础概念**：从神经网络开始
+2. **核心特征**：多层结构和自动特征提取
+3. **实际应用**：图像识别、自然语言处理等
+
+**解释重点：**
+- 与传统机器学习的**区别**
+- **优势**和**局限性**
+- 学习**路径**和**资源推荐**`;
+
+            const finalAnswer = `## 深度学习核心概念解析
+
+### 🧠 基本定义
+**深度学习**是机器学习的一个分支，使用多层神经网络来模拟人脑的学习过程。
+
+### 🔑 核心特征
+- **多层结构**：包含多个隐藏层的神经网络
+- **自动特征提取**：无需手动设计特征
+- **端到端学习**：从原始数据直接学习到最终输出
+
+### 🚀 主要应用
+- 图像识别和计算机视觉
+- 自然语言处理和机器翻译
+- 语音识别和合成`;
+
+            const resultDiv = document.getElementById('test3-result');
+            resultDiv.innerHTML = `
+                <h4>推理过程：</h4>
+                <div class="reasoning-content">${parseMarkdown(reasoningContent)}</div>
+                <h4>最终回答：</h4>
+                <div class="final-answer">${parseMarkdown(finalAnswer)}</div>
+            `;
+        }
+    </script>
+</body>
+</html>

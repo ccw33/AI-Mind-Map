@@ -114,10 +114,18 @@ export class AIService {
     console.log('💬 用户消息:', messages.find(m => m.role === 'user')?.content || '无');
     console.log('==================');
 
+    // 根据模型类型动态设置max_tokens
+    let maxTokens = this.mindMapConfig.maxResponseLength; // 默认使用配置值
+    if (model.toLowerCase().includes('deepseek-chat')) {
+      maxTokens = 8000;
+    } else if (model.toLowerCase().includes('deepseek-reasoner')) {
+      maxTokens = 64000;
+    }
+
     const requestBody = {
       model,
       messages,
-      max_tokens: this.mindMapConfig.maxResponseLength,
+      max_tokens: maxTokens,
       temperature: 0.7,
       stream: false
     }
