@@ -1197,21 +1197,21 @@ const AI_PROMPTS = {
 - 然后提供结构化的分点供用户选择添加到思维导图
 - 保持逻辑性和条理性`,
 
+
   // JSON格式示例
-  JSON_EXAMPLE: `\`\`\`json
+JSON_EXAMPLE: `\`\`\`json
 {
   "structuredPoints": [
     {
       "title": "概括性标题",
-      "content": "详细解释内容",
-      "keywords": ["关键词1", "关键词2"]
+      "content": "完整复制原始回答中对应部分的所有内容​；保留所有Markdown格式（标题、列表、加粗等）；保持原始换行和缩进；禁止任何修改或缩写"
     }
   ]
 }
 \`\`\``,
 
   // JSON格式要求说明
-  JSON_FORMAT_INSTRUCTION: `重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的内容与你的原始回答保持一致：`
+  JSON_FORMAT_INSTRUCTION: `重要：请在回答的最后，使用以下JSON格式额外提供原答案的结构化分点，确保JSON中的content内容100%复制原始分点内容：`
 };
 
 // 构建完整系统提示词的辅助函数
