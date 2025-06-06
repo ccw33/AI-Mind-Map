@@ -1,0 +1,33 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v3
+
+      - name: 设置 SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: 添加服务器到 known_hosts
+        run: |
+          echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: 远程部署
+        run: |
+          ssh root@8.134.201.175 '
+            cd /root/AI-Mind-Map-cursor &&
+            git pull &&
+            docker build -t mind-map-nginx . &&
+            docker stop mind-map-app || true &&
+            docker rm mind-map-app || true &&
+            docker run -d -p 9090:9090 --name mind-map-app mind-map-nginx
+          '
